@@ -26,6 +26,22 @@ export async function middleware(request: NextRequest) {
 
     const { data: { user } } = await supabase.auth.getUser()
     const pathname = request.nextUrl.pathname
+    const nonIndexableRoutes = [
+        '/auth',
+        '/dashboard',
+        '/create',
+        '/batch',
+        '/admin',
+        '/test-session',
+        '/preview',
+    ]
+    const isNonIndexableRoute = nonIndexableRoutes.some(
+        (route) => pathname === route || pathname.startsWith(`${route}/`)
+    )
+
+    if (isNonIndexableRoute) {
+        response.headers.set('X-Robots-Tag', 'noindex, nofollow')
+    }
 
     // 1. Routes privées utilisateurs
     const isProtectedRoute =
@@ -66,5 +82,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+    matcher: [
+        '/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff2?)$).*)',
+    ],
 }
