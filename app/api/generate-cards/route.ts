@@ -5,6 +5,13 @@ import { GenerateRequestSchema } from "@/lib/schemas/card-design";
 
 export const runtime = "nodejs";
 
+function isRateLimitError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const candidate = error as { status?: unknown; message?: unknown };
+  return candidate.status === 429 || (typeof candidate.message === 'string' && candidate.message.includes('429'));
+}
+
 export async function POST(request: Request) {
   try {
     const contentType = request.headers.get("content-type");
@@ -35,8 +42,22 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("Erreur de génération des cartes", error);
 
-    const message = error instanceof Error ? error.message : "La génération a échoué.";
+    if (isRateLimitError(error)) {
+      return NextResponse.json(
+        {
+          code: 'RATE_LIMITED',
+          error: "Le service de création est très sollicité pour le moment.",
+        },
+        { status: 429 }
+      );
+    }
 
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      {
+        code: 'GENERATION_FAILED',
+        error: "Impossible de créer les propositions pour le moment.",
+      },
+      { status: 502 }
+    );
   }
 }

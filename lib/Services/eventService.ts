@@ -11,6 +11,13 @@ export class CardCreationError extends Error {
     }
 }
 
+export class CardGenerationError extends Error {
+    constructor(public readonly code: string) {
+        super(code);
+        this.name = 'CardGenerationError';
+    }
+}
+
 export const eventService = {
     /**
      * Upload d'une image vers le serveur
@@ -37,20 +44,29 @@ export const eventService = {
      * Génération des poèmes via l'IA
      */
     async generateCardDesigns(params: GenerateRequest): Promise<CardDesign[]> {
-        const res = await fetch('/api/generate-cards', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(params),
-        });
-
-        if (!res.ok) {
-            const errorData = await res.json();
-            throw new Error(errorData.error || 'Gemini error');
+        let res: Response;
+        try {
+            res = await fetch('/api/generate-cards', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(params),
+            });
+        } catch {
+            throw new CardGenerationError('NETWORK_ERROR');
         }
 
-        const data = await res.json();
+        let data: { designs?: unknown; code?: string };
+        try {
+            data = await res.json();
+        } catch {
+            throw new CardGenerationError('GENERATION_FAILED');
+        }
+        if (!res.ok) {
+            throw new CardGenerationError(data.code || 'GENERATION_FAILED');
+        }
+
         if (!Array.isArray(data.designs) || data.designs.length !== 4) {
-            throw new Error('La génération doit retourner exactement quatre designs.');
+            throw new CardGenerationError('GENERATION_FAILED');
         }
 
         return data.designs;
