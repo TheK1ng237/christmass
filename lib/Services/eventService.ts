@@ -1,4 +1,5 @@
-import { Language, Gender, EventType, TemplateId, GeneratedPoem } from '@/lib/types';
+import { Language, Gender, EventType } from '@/lib/types';
+import type { CardDesign, GenerateRequest } from '@/lib/schemas/card-design';
 
 export const eventService = {
     /**
@@ -25,23 +26,11 @@ export const eventService = {
     /**
      * Génération des poèmes via l'IA
      */
-    async generatePoems(params: {
-        name: string,
-        gender: Gender,
-        language: Language,
-        eventType: EventType,
-        user_id: string // Ajout de l'ID utilisateur ici
-    }): Promise<GeneratedPoem[]> {
-        const res = await fetch('/api/generate-poem', {
+    async generateCardDesigns(params: GenerateRequest): Promise<CardDesign[]> {
+        const res = await fetch('/api/generate-cards', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: params.name,
-                gender: params.gender,
-                language: params.language,
-                eventType: params.eventType,
-                user_id: params.user_id,
-            }),
+            body: JSON.stringify(params),
         });
 
         if (!res.ok) {
@@ -50,14 +39,13 @@ export const eventService = {
         }
 
         const data = await res.json();
-        if (!data.poems || data.poems.length === 0) throw new Error('No poems');
+        if (!Array.isArray(data.designs) || data.designs.length !== 4) {
+            throw new Error('La génération doit retourner exactement quatre designs.');
+        }
 
-        return data.poems;
+        return data.designs;
     },
 
-    /**
-     * Création finale de la carte de partage
-     */
     /**
      * Création finale de la carte de partage
      */
@@ -66,8 +54,7 @@ export const eventService = {
         gender: Gender,
         language: Language,
         eventType: EventType,
-        templateId: TemplateId, // Garde le CamelCase en entrée pour le TS
-        poem: string,
+        design: CardDesign,
         imageUrl: string | null
         user_id: string | null;
     }) {
@@ -80,8 +67,7 @@ export const eventService = {
                 gender: params.gender,
                 language: params.language,
                 event_type: params.eventType,
-                template_id: params.templateId,
-                poem: params.poem,
+                design: params.design,
                 image_url: params.imageUrl,
                 user_id: params.user_id,
             }),
@@ -95,4 +81,3 @@ export const eventService = {
         return await res.json();
     }
 };
-

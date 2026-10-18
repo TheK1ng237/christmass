@@ -1,6 +1,7 @@
 'use client';
 
-import {useState, useEffect, useMemo, useRef,Suspense} from 'react';
+import type { ReactNode } from 'react';
+import { useState, useEffect, useMemo, useRef, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     LayoutGrid, List, Plus, Search, Trash2, Send, Eye,
@@ -13,13 +14,13 @@ import {
     CardStats,
     EVENT_LABELS,
     EventType,
-    TemplateId,
     CardData
 } from "@/lib/types";
 
-import { getTemplateComponent } from '@/components/TemplateRoutes';
-import {supabase} from "@/lib/supabaseClient";
-import {useEvent} from "@/app/context/EventContext";
+import { CardRenderer } from '@/components/cards/card-renderer';
+import { normalizeCardDesign } from '@/lib/cards/normalize-card-design';
+import { supabase } from "@/lib/supabaseClient";
+import { useEvent } from "@/app/context/EventContext";
 
 const eventLabels = EVENT_LABELS;
 
@@ -27,7 +28,6 @@ function DashboardContent() {
     const searchParams = useSearchParams();
     const { eventId, setEventId } = useEvent();
     const currentEvent = useMemo(() => EVENTS[eventId], [eventId]);
-    // État
     const [cards, setCards] = useState<CardRow[]>([]);
     const [filteredCards, setFilteredCards] = useState<CardRow[]>([]);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -48,7 +48,6 @@ function DashboardContent() {
     const [canScrollLeft, setCanScrollLeft] = useState(false);
     const [canScrollRight, setCanScrollRight] = useState(false);
 
-    // Fonction pour détecter si le scroll est possible
     const updateScrollButtons = () => {
         if (scrollRef.current) {
             const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
@@ -65,21 +64,15 @@ function DashboardContent() {
 
     const handleScroll = (direction: 'left' | 'right') => {
         if (scrollRef.current) {
-            const distance = 250;
             scrollRef.current.scrollBy({
-                left: direction === 'left' ? -distance : distance,
+                left: direction === 'left' ? -250 : 250,
                 behavior: 'smooth'
             });
         }
     };
 
-    useEffect(() => {
-        loadUserCards();
-    }, []);
-
-    useEffect(() => {
-        filterCards();
-    }, [searchQuery, selectedEvent, cards]);
+    useEffect(() => { loadUserCards(); }, []);
+    useEffect(() => { filterCards(); }, [searchQuery, selectedEvent, cards]);
 
     const loadUserCards = async () => {
         setIsLoading(true);
@@ -91,7 +84,6 @@ function DashboardContent() {
                 .from('cards')
                 .select('*')
                 .eq('user_id', user.id)
-                .not('template_id', 'is', null)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -99,18 +91,13 @@ function DashboardContent() {
             const cardsData = data || [];
             setCards(cardsData);
 
-            // Calcul des stats
             const totalViews = cardsData.reduce((sum, card) => sum + (card.views_count || 0), 0);
             const eventCounts = cardsData.reduce((acc, card) => {
                 acc[card.event_type as EventType] = (acc[card.event_type as EventType] || 0) + 1;
                 return acc;
             }, {} as Record<EventType, number>);
 
-            setStats({
-                total: cardsData.length,
-                totalViews,
-                events: eventCounts
-            });
+            setStats({ total: cardsData.length, totalViews, events: eventCounts });
         } catch (error) {
             console.error('Erreur chargement:', error);
         } finally {
@@ -133,20 +120,13 @@ function DashboardContent() {
         setFilteredCards(filtered);
     };
 
-
     const validCards: CardData[] = useMemo(
-        () =>
-            filteredCards.map(c => {
-
-                return {
-                    ...c,
-                    // On garde la valeur brute de la DB, on ne force le "1" QUE si c'est vraiment vide
-                    template_id: c.template_id ? (Number(c.template_id) as TemplateId) : (1 as TemplateId),
-                    event_type: c.event_type as EventType,
-                    created_at: c.created_at || new Date().toISOString(),
-                    views_count: c.views_count || 0,
-                };
-            }),
+        () => filteredCards.map(c => ({
+            ...c,
+            event_type: c.event_type as EventType,
+            created_at: c.created_at || new Date().toISOString(),
+            views_count: c.views_count || 0,
+        })),
         [filteredCards]
     );
 
@@ -184,147 +164,178 @@ function DashboardContent() {
     };
 
     return (
-        <div className="min-h-screen bg-[#030712] text-white pt-20 mt-20">
-            {/* Header section */}
-            <div className="max-w-7xl mx-auto px-6 mb-12">
+        <div className="min-h-screen bg-[#1A0F14] text-white pt-24">
+
+            {/* Subtle ambient glow */}
+            <div className="fixed inset-0 pointer-events-none overflow-hidden">
+                <div
+                    className="absolute top-0 right-0 w-1/2 h-1/2 blur-[200px] opacity-[0.07]"
+                    style={{ backgroundColor: currentEvent.colors.primary }}
+                />
+            </div>
+
+            <div className="relative z-10 max-w-7xl mx-auto px-5 sm:px-8 pt-8 pb-20">
+
+                {/* Header */}
                 <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-12">
                     <div>
-                        <h1 className="text-5xl font-black italic tracking-tighter mb-2 uppercase">
-                            MY <span style={{ color: currentEvent.colors.primary }}>Dashboard</span>
+                        <p className="text-[11px] font-medium text-white/30 tracking-widest uppercase mb-2">Mon espace</p>
+                        <h1 className="font-serif text-4xl sm:text-5xl font-semibold">
+                            Mes <em className="italic not-italic" style={{ color: currentEvent.colors.accent }}>créations</em>
                         </h1>
-                        <p className="text-gray-500 font-medium">Gérez vos campagnes et vos cartes</p>
                     </div>
-                    <a href="/create"
-                       style={{ backgroundColor: currentEvent.colors.primary }}
-                       className="px-8 py-4 rounded-2xl  text-whitefont-black italic uppercase text-sm flex items-center gap-3 hover:scale-105 transition-all shadow-xl shadow-white/10">
-                        <Plus size={20} /> Nouvelle Création
+                    <a
+                        href="/create"
+                        style={{ backgroundColor: currentEvent.colors.primary }}
+                        className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl text-white text-[13px] font-semibold hover:opacity-90 active:scale-[0.97] transition-all shadow-lg"
+                    >
+                        <Plus size={16} />
+                        Nouvelle création
                     </a>
                 </div>
 
-                {/* Stats Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <StatCard icon={<Zap />} label="Total Cartes" value={stats.total} color="#A855F7" />
-                    <StatCard icon={<Eye />} label="Vues Totales" value={stats.totalViews} color="#3B82F6" />
-                    <StatCard icon={<Calendar />} label="Événements" value={Object.keys(stats.events).length} color="#10B981" />
+                {/* Stats */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
+                    <StatCard icon={<Zap size={16} />} label="Cartes créées" value={stats.total} color={currentEvent.colors.primary} />
+                    <StatCard icon={<Eye size={16} />} label="Vues totales" value={stats.totalViews} color="#60A5FA" />
+                    <StatCard icon={<Calendar size={16} />} label="Occasions" value={Object.keys(stats.events).length} color="#34D399" />
                 </div>
-            </div>
 
-            {/* Toolbar */}
-            <div className="max-w-7xl mx-auto px-6 mb-8">
-                <div className="bg-white/5 border border-white/10 rounded-[2.5rem] p-4 flex flex-col lg:flex-row gap-4 items-center justify-between backdrop-blur-xl">
-                    <div className="relative w-full lg:max-w-md">
-                        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+                {/* Toolbar */}
+                <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between mb-6">
+                    <div className="relative flex-1 max-w-md">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/25" size={15} />
                         <input
                             type="text"
                             placeholder="Rechercher un destinataire..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-14 pr-6 py-4 rounded-[1.5rem] bg-white/5 border border-white/5 focus:border-white/20 outline-none transition-all font-medium"
+                            className="w-full pl-11 pr-5 py-3 rounded-xl bg-white/[0.04] border border-white/[0.07] focus:border-white/20 outline-none transition-all text-[13px] text-white placeholder:text-white/25"
                         />
                     </div>
 
-                    <div className="flex items-center gap-4 w-full lg:w-auto">
+                    <div className="flex items-center gap-2">
                         {selectedCards.size > 0 && (
-                            <button onClick={() => setShowDeleteModal(true)} className="flex-1 lg:flex-none px-6 py-4 rounded-2xl bg-red-500/10 text-red-500 font-black uppercase italic text-xs border border-red-500/20 hover:bg-red-500/20 transition-all flex items-center justify-center gap-2">
-                                <Trash2 size={16} /> Supprimer ({selectedCards.size})
+                            <button
+                                onClick={() => setShowDeleteModal(true)}
+                                className="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-500/[0.08] text-red-400 text-[12px] font-medium border border-red-500/[0.15] hover:bg-red-500/[0.14] transition-all"
+                            >
+                                <Trash2 size={14} />
+                                Supprimer ({selectedCards.size})
                             </button>
                         )}
-                        <div className="flex bg-black/20 rounded-2xl p-1 border border-white/5">
-                            <button onClick={() => setViewMode('grid')} className={`p-3 rounded-xl transition-all ${viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}><LayoutGrid size={20}/></button>
-                            <button onClick={() => setViewMode('list')} className={`p-3 rounded-xl transition-all ${viewMode === 'list' ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-300'}`}><List size={20}/></button>
+                        <div className="flex bg-white/[0.04] rounded-xl p-1 border border-white/[0.06]">
+                            <button
+                                onClick={() => setViewMode('grid')}
+                                className={`p-2.5 rounded-lg transition-all ${viewMode === 'grid' ? 'bg-white/10 text-white' : 'text-white/25 hover:text-white/50'}`}
+                            >
+                                <LayoutGrid size={16} />
+                            </button>
+                            <button
+                                onClick={() => setViewMode('list')}
+                                className={`p-2.5 rounded-lg transition-all ${viewMode === 'list' ? 'bg-white/10 text-white' : 'text-white/25 hover:text-white/50'}`}
+                            >
+                                <List size={16} />
+                            </button>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            {/* Event Filters */}
-            <div className="relative max-w-7xl mx-auto mb-10 group">
-
-                {/* Flèche Gauche - Apparaît au survol du conteneur parent si scroll possible */}
-                <button
-                    onClick={() => handleScroll('left')}
-                    className={`absolute left-2 top-1/2 -translate-y-1/2 z-20 p-2 bg-white/80 backdrop-blur-md border border-white/10 rounded-full transition-opacity duration-300 ${canScrollLeft ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-                >
-                    <ChevronLeft size={26} className="text-white" />
-                </button>
-
-                {/* Liste Défilante */}
-                <div
-                    ref={scrollRef}
-                    onScroll={updateScrollButtons}
-                    className="flex items-center gap-3 overflow-x-auto no-scrollbar px-6 py-2 snap-x snap-mandatory scroll-smooth"
-                >
-                    {/* BOUTON "TOUS" */}
+                {/* Event filter chips */}
+                <div className="relative mb-8">
                     <button
-                        onClick={() => setSelectedEvent(null)}
-                        className={`snap-center shrink-0 px-6 py-3 rounded-full text-xs font-black uppercase tracking-widest transition-all duration-300 border active:scale-95 ${
-                            !selectedEvent
-                                ? 'bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.3)]'
-                                : 'bg-white/5 text-gray-500 border-white/5 hover:border-white/20'
-                        }`}
+                        onClick={() => handleScroll('left')}
+                        className={`absolute left-0 top-1/2 -translate-y-1/2 z-20 p-1.5 bg-[#1A0F14] border border-white/[0.07] rounded-full transition-opacity ${canScrollLeft ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                     >
-                        Tous les événements
+                        <ChevronLeft size={16} className="text-white/50" />
                     </button>
 
-                    {/* AUTRES BOUTONS */}
-                    {(Object.keys(EVENTS) as Array<EventType>).map((type) => (
+                    <div
+                        ref={scrollRef}
+                        onScroll={updateScrollButtons}
+                        className="flex items-center gap-2 overflow-x-auto no-scrollbar px-1 py-1"
+                    >
                         <button
-                            key={type}
-                            onClick={() => setSelectedEvent(type)}
-                            className={`snap-center shrink-0 px-6 py-3 rounded-full text-xs font-black uppercase tracking-widest transition-all duration-300 border flex items-center gap-3 whitespace-nowrap active:scale-95 ${
-                                selectedEvent === type
-                                    ? 'bg-white text-black border-white shadow-[0_0_20px_rgba(255,255,255,0.3)]'
-                                    : 'bg-white/5 text-gray-500 border-white/5 hover:border-white/20'
+                            onClick={() => setSelectedEvent(null)}
+                            className={`shrink-0 px-4 py-2 rounded-full text-[12px] font-medium transition-all border ${
+                                !selectedEvent
+                                    ? 'bg-white text-black border-transparent'
+                                    : 'bg-white/[0.04] text-white/40 border-white/[0.07] hover:text-white/70'
                             }`}
                         >
-        <span
-            className={`w-2 h-2 rounded-full transition-transform duration-300 ${
-                selectedEvent === type ? 'scale-125' : ''
-            }`}
-            style={{ backgroundColor: EVENTS[type].colors.primary }}
-        />
-                            {EVENTS[type].name.fr}
+                            Tous
                         </button>
-                    ))}
 
+                        {(Object.keys(EVENTS) as Array<EventType>).map((type) => (
+                            <button
+                                key={type}
+                                onClick={() => setSelectedEvent(type)}
+                                className={`shrink-0 flex items-center gap-2 px-4 py-2 rounded-full text-[12px] font-medium transition-all border whitespace-nowrap ${
+                                    selectedEvent === type
+                                        ? 'bg-white text-black border-transparent'
+                                        : 'bg-white/[0.04] text-white/40 border-white/[0.07] hover:text-white/70'
+                                }`}
+                            >
+                                <span
+                                    className="w-1.5 h-1.5 rounded-full"
+                                    style={{ backgroundColor: EVENTS[type].colors.primary }}
+                                />
+                                {EVENTS[type].name.fr}
+                            </button>
+                        ))}
+                    </div>
 
-                    <div className="w-8 shrink-0" />
+                    <button
+                        onClick={() => handleScroll('right')}
+                        className={`absolute right-0 top-1/2 -translate-y-1/2 z-20 p-1.5 bg-[#1A0F14] border border-white/[0.07] rounded-full transition-opacity ${canScrollRight ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
+                    >
+                        <ChevronRight size={16} className="text-white/50" />
+                    </button>
                 </div>
 
-                {/* Flèche Droite */}
-                <button
-                    onClick={() => handleScroll('right')}
-                    className={`absolute right-2 top-1/2 -translate-y-1/2 z-20 p-2 bg-white/80 backdrop-blur-md border border-white/10 rounded-full transition-opacity duration-300 ${canScrollRight ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-                >
-                    <ChevronRight size={26} className="text-white" />
-                </button>
-            </div>
-
-            {/* Grid/List Rendering */}
-            <div className="max-w-7xl mx-auto px-6 pb-20 ">
+                {/* Cards grid/list */}
                 {isLoading ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                        {[1, 2, 3, 6].map(i => <div key={i} className="aspect-[3/4] rounded-[2.5rem] bg-white/5 animate-pulse" />)}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {[1, 2, 3, 4, 5, 6].map(i => (
+                            <div key={i} className="aspect-[3/4] rounded-2xl bg-white/[0.03] animate-pulse" />
+                        ))}
                     </div>
                 ) : filteredCards.length === 0 ? (
-                    <div className="py-40 text-center bg-white/[0.02] rounded-[3rem] border border-dashed border-white/10">
-                        <div className="text-5xl mb-6">✨</div>
-                        <h3 className="text-2xl font-black italic uppercase mb-2">Aucune carte trouvée</h3>
-                        <p className="text-gray-500 mb-8">Il est temps de créer votre premier chef-d'œuvre.</p>
-                        <a href="/create" className="px-8 py-4 rounded-2xl  font-black uppercase italic text-sm"
-                           style={{ backgroundColor: currentEvent.colors.primary }}
-                        >Créer une carte</a>
+                    <div className="py-40 text-center border border-dashed border-white/[0.07] rounded-2xl">
+                        <div className="text-4xl mb-5">✨</div>
+                        <h3 className="font-serif text-2xl font-semibold mb-2">Aucune carte trouvée</h3>
+                        <p className="text-white/35 text-[14px] mb-8">Il est temps de créer votre premier chef-d&apos;œuvre.</p>
+                        <a
+                            href="/create"
+                            className="inline-flex items-center gap-2 px-6 py-3 rounded-xl text-white text-[13px] font-semibold"
+                            style={{ backgroundColor: currentEvent.colors.primary }}
+                        >
+                            <Plus size={15} />
+                            Créer une carte
+                        </a>
                     </div>
                 ) : viewMode === 'grid' ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {validCards.map(card => (
-                            <CardGridItem key={card.id} card={card} isSelected={selectedCards.has(card.id)} onSelect={() => toggleCardSelection(card.id)} onShare={() => handleShare(card)} />
+                            <CardGridItem
+                                key={card.id}
+                                card={card}
+                                isSelected={selectedCards.has(card.id)}
+                                onSelect={() => toggleCardSelection(card.id)}
+                                onShare={() => handleShare(card)}
+                            />
                         ))}
                     </div>
                 ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-3">
                         {validCards.map(card => (
-                            <CardListItem key={card.id} card={card} isSelected={selectedCards.has(card.id)} onSelect={() => toggleCardSelection(card.id)} onShare={() => handleShare(card)} />
+                            <CardListItem
+                                key={card.id}
+                                card={card}
+                                isSelected={selectedCards.has(card.id)}
+                                onSelect={() => toggleCardSelection(card.id)}
+                                onShare={() => handleShare(card)}
+                            />
                         ))}
                     </div>
                 )}
@@ -338,8 +349,6 @@ function DashboardContent() {
                         onCancel={() => setShowDeleteModal(false)}
                     />
                 )}
-
-
                 {showCopyModal && (
                     <CopySuccessModal onClose={() => setShowCopyModal(false)} />
                 )}
@@ -348,18 +357,20 @@ function DashboardContent() {
     );
 }
 
-// --- SOUS-COMPOSANTS ---
+// --- Sub-components ---
 
-function StatCard({ icon, label, value, color }: { icon: any, label: string, value: number, color: string }) {
+function StatCard({ icon, label, value, color }: { icon: ReactNode, label: string, value: number, color: string }) {
     return (
-        <div className="bg-white/[0.03] rounded-[2rem] p-8 border border-white/10 backdrop-blur-xl relative overflow-hidden group">
-            <div className="absolute -inset-24 opacity-0 group-hover:opacity-10 transition-opacity duration-500 blur-3xl rounded-full" style={{ backgroundColor: color }} />
-            <div className="relative z-10">
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-6 shadow-lg" style={{ backgroundColor: `${color}20`, color: color }}>
+        <div className="group relative p-6 rounded-2xl bg-white/[0.03] border border-white/[0.06] overflow-hidden hover:border-white/[0.10] transition-all">
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-3xl" style={{ backgroundColor: color + '15' }} />
+            <div className="relative z-10 flex items-start justify-between">
+                <div>
+                    <div className="text-3xl font-serif font-semibold mb-1">{value}</div>
+                    <div className="text-[11px] text-white/35 font-medium">{label}</div>
+                </div>
+                <div className="p-2.5 rounded-xl" style={{ backgroundColor: color + '15', color: color }}>
                     {icon}
                 </div>
-                <div className="text-4xl font-black italic tracking-tighter mb-1">{value}</div>
-                <div className="text-gray-500 text-[10px] font-black uppercase tracking-[0.2em]">{label}</div>
             </div>
         </div>
     );
@@ -367,94 +378,127 @@ function StatCard({ icon, label, value, color }: { icon: any, label: string, val
 
 function CardGridItem({ card, isSelected, onSelect, onShare }: { card: CardData, isSelected: boolean, onSelect: () => void, onShare: () => void }) {
     const event = EVENTS[card.event_type] || EVENTS.christmas;
-    const TemplatePreview = getTemplateComponent(card.event_type, card.template_id);
+    const design = normalizeCardDesign(card.poem, {
+        name: card.name,
+        eventType: card.event_type,
+        language: card.language,
+    });
 
     return (
-        <motion.div layout className="group relative">
-            {/* Bouton de sélection */}
-            <button
-                onClick={onSelect}
-                className={`absolute top-5 left-5 z-30 w-8 h-8 rounded-full border-2 transition-all flex items-center justify-center backdrop-blur-md ${
-                    isSelected ? 'border-white bg-white text-black' : 'border-white/20 bg-black/40 hover:border-white/50'
-                }`}
-            >
-                {isSelected ? <Check size={16} /> : null}
-            </button>
+        <motion.div layout className="group flex flex-col gap-3">
+            {/* Card container */}
+            <div className={`relative rounded-2xl overflow-hidden border transition-all duration-300 ${
+                isSelected
+                    ? 'border-white/30 shadow-[0_0_0_2px_rgba(255,255,255,0.12)]'
+                    : 'border-white/[0.07] hover:border-white/15'
+            }`}>
 
-            {/* Conteneur de la Carte */}
-            <div className="relative aspect-[3/4] rounded-[2.5rem] overflow-hidden bg-white/5 border border-white/10 group-hover:border-white/30 transition-all duration-500 shadow-2xl">
+                {/* Checkbox */}
+                <button
+                    onClick={onSelect}
+                    className={`absolute top-3 left-3 z-30 w-6 h-6 rounded-full border-2 transition-all flex items-center justify-center backdrop-blur-sm ${
+                        isSelected
+                            ? 'border-white bg-white text-black opacity-100'
+                            : 'border-white/30 bg-black/40 opacity-0 group-hover:opacity-100'
+                    }`}
+                >
+                    {isSelected && <Check size={12} strokeWidth={3} />}
+                </button>
 
-                {/* 🎨 LA CORRECTION EST ICI : On adapte le scale pour remplir le conteneur */}
-                <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
-                    <div
-                        className="w-[400px] h-[533px] origin-center transition-transform duration-700 group-hover:scale-[0.55]"
-                        style={{ transform: 'scale(0.5)' }}
-                    >
-                        <TemplatePreview
-                            name={card.name}
-                            poem={card.poem}
-                            imageUrl={card.image_url}
-                            language={card.language}
-                        />
-                    </div>
-                </div>
-                {/* Overlay au survol (Actions) */}
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition-all duration-300 flex flex-col items-center justify-center gap-4 z-20">
-                    <div className="flex gap-3 scale-90 group-hover:scale-100 transition-transform duration-300">
-                        <a
-                            href={`/preview/${card.share_token}`}
-                            target="_blank"
-                            className="p-4 rounded-2xl bg-white text-black hover:bg-gray-200 transition-colors shadow-xl"
-                        >
-                            <ExternalLink size={20} />
-                        </a>
-                        <button
-                            onClick={onShare}
-                            className="p-4 rounded-2xl bg-white/10 border border-white/20 hover:bg-white/20 transition-all text-white backdrop-blur-md shadow-xl"
-                        >
-                            <Send size={20} />
-                        </button>
-                    </div>
-                </div>
-
-                {/* Badge Événement */}
-                <div className="absolute top-5 right-5 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest z-10 text-white shadow-lg" style={{ backgroundColor: event.colors.primary }}>
+                {/* Badge */}
+                <div
+                    className="absolute top-3 right-3 z-20 px-2 py-0.5 rounded-full text-[10px] font-medium text-white"
+                    style={{ backgroundColor: event.colors.primary + 'D0', backdropFilter: 'blur(6px)' }}
+                >
                     {event.name.fr}
+                </div>
+
+                {/* La carte — rendue directement, pas de scale hacky */}
+                <div className="w-full aspect-[3/4] overflow-hidden">
+                    <CardRenderer design={design} imageUrl={card.image_url} />
+                </div>
+
+                {/* Actions — barre glissante depuis le bas */}
+                <div className="absolute bottom-0 inset-x-0 z-20 p-3 flex gap-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent translate-y-full group-hover:translate-y-0 transition-transform duration-200 ease-out">
+                    <a
+                        href={`/preview/${card.share_token}`}
+                        target="_blank"
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white text-black text-[12px] font-semibold hover:bg-white/90 transition-colors"
+                    >
+                        <ExternalLink size={13} />
+                        Ouvrir
+                    </a>
+                    <button
+                        onClick={onShare}
+                        className="px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/20 transition-all backdrop-blur-md"
+                        title="Partager"
+                    >
+                        <Send size={13} />
+                    </button>
                 </div>
             </div>
 
-            {/* Footer Stats */}
-            <div className="mt-5 px-2 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                    <span className="flex items-center gap-1.5 text-[11px] font-bold text-gray-400">
-                        <Eye size={14} style={{ color: event.colors.primary }} />
+            {/* Infos */}
+            <div className="flex items-center justify-between px-0.5">
+                <span className="text-[12px] font-medium text-white/55 truncate pr-2">{card.name}</span>
+                <div className="flex items-center gap-2 shrink-0 text-white/25">
+                    <span className="flex items-center gap-1 text-[11px]">
+                        <Eye size={11} />
                         {card.views_count || 0}
                     </span>
+                    <span className="text-[10px]">
+                        {new Date(card.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                    </span>
                 </div>
-                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-tighter italic">
-                    {new Date(card.created_at).toLocaleDateString()}
-                </span>
             </div>
         </motion.div>
     );
 }
+
+
 function CardListItem({ card, isSelected, onSelect, onShare }: { card: CardData, isSelected: boolean, onSelect: () => void, onShare: () => void }) {
     const event = EVENTS[card.event_type] || EVENTS.christmas;
     return (
-        <motion.div layout className={`flex items-center gap-6 p-4 rounded-3xl border transition-all ${isSelected ? 'bg-white/10 border-white/30' : 'bg-white/[0.02] border-white/5 hover:border-white/10'}`}>
-            <button onClick={onSelect} className={`w-8 h-8 rounded-xl border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-white border-white text-black' : 'border-white/10 hover:border-white/20'}`}>
-                {isSelected && <Check size={16} />}
+        <motion.div
+            layout
+            className={`flex items-center gap-5 p-4 rounded-xl border transition-all ${
+                isSelected ? 'bg-white/[0.06] border-white/20' : 'bg-white/[0.02] border-white/[0.05] hover:border-white/10'
+            }`}
+        >
+            <button
+                onClick={onSelect}
+                className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center transition-all shrink-0 ${
+                    isSelected ? 'bg-white border-white text-black' : 'border-white/10 hover:border-white/25'
+                }`}
+            >
+                {isSelected && <Check size={14} />}
             </button>
 
             <div className="flex-1 min-w-0">
-                <h3 className="font-black italic text-sm truncate uppercase tracking-tighter">{card.name}</h3>
+                <h3 className="font-serif text-[14px] font-semibold truncate">{card.name}</h3>
                 <div className="flex items-center gap-2 mt-0.5">
-                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{event.name.fr}</span>
+                    <span
+                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                        style={{ backgroundColor: event.colors.primary }}
+                    />
+                    <span className="text-[11px] text-white/35">{event.name.fr}</span>
                 </div>
             </div>
-            <div className="flex items-center gap-2">
-                <a href={`/preview/${card.share_token}`} target="_blank" className="p-3 rounded-xl bg-white/5 text-gray-400 hover:text-white"><ExternalLink size={18} /></a>
-                <button onClick={onShare} className="p-3 rounded-xl bg-white/5 text-gray-400 hover:text-white"><Send size={18} /></button>
+
+            <div className="flex items-center gap-1.5 shrink-0">
+                <a
+                    href={`/preview/${card.share_token}`}
+                    target="_blank"
+                    className="p-2.5 rounded-lg bg-white/[0.04] text-white/35 hover:text-white hover:bg-white/[0.08] transition-all"
+                >
+                    <ExternalLink size={15} />
+                </a>
+                <button
+                    onClick={onShare}
+                    className="p-2.5 rounded-lg bg-white/[0.04] text-white/35 hover:text-white hover:bg-white/[0.08] transition-all"
+                >
+                    <Send size={15} />
+                </button>
             </div>
         </motion.div>
     );
@@ -462,16 +506,34 @@ function CardListItem({ card, isSelected, onSelect, onShare }: { card: CardData,
 
 function DeleteModal({ count, onConfirm, onCancel }: { count: number, onConfirm: () => void, onCancel: () => void }) {
     return (
-        <div className="fixed inset-0 bg-[#030712]/90 backdrop-blur-xl z-50 flex items-center justify-center p-6">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-[#0a0f1e] rounded-[3rem] border border-red-500/20 p-10 max-w-md w-full text-center shadow-2xl shadow-red-500/10">
-                <div className="w-20 h-20 rounded-3xl bg-red-500/10 flex items-center justify-center mb-8 mx-auto border border-red-500/20 text-red-500">
-                    <Trash2 size={40} />
+        <div className="fixed inset-0 bg-[#0E090C]/85 backdrop-blur-xl z-50 flex items-center justify-center p-6">
+            <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                className="bg-[#1E1318] rounded-2xl border border-red-500/15 p-8 max-w-sm w-full text-center shadow-2xl"
+            >
+                <div className="w-14 h-14 rounded-2xl bg-red-500/10 flex items-center justify-center mb-6 mx-auto border border-red-500/15 text-red-400">
+                    <Trash2 size={24} />
                 </div>
-                <h2 className="text-3xl font-black italic uppercase mb-4 tracking-tighter">Supprimer <span className="text-red-500">{count}</span> cartes ?</h2>
-                <p className="text-gray-500 text-sm font-medium mb-10 leading-relaxed">Cette action est irréversible. Les liens de partage ne fonctionneront plus.</p>
-                <div className="flex flex-col gap-3">
-                    <button onClick={onConfirm} className="w-full py-5 rounded-2xl bg-red-500 text-white font-black uppercase italic tracking-widest shadow-xl shadow-red-500/20">Confirmer la suppression</button>
-                    <button onClick={onCancel} className="w-full py-5 rounded-2xl bg-white/5 text-gray-400 font-bold">Annuler</button>
+                <h2 className="font-serif text-2xl font-semibold mb-3">
+                    Supprimer <span className="text-red-400">{count}</span> {count > 1 ? 'cartes' : 'carte'} ?
+                </h2>
+                <p className="text-white/35 text-[13px] leading-relaxed mb-8">
+                    Cette action est irréversible. Les liens de partage ne fonctionneront plus.
+                </p>
+                <div className="flex flex-col gap-2.5">
+                    <button
+                        onClick={onConfirm}
+                        className="w-full py-3.5 rounded-xl bg-red-500 text-white text-[13px] font-semibold"
+                    >
+                        Confirmer la suppression
+                    </button>
+                    <button
+                        onClick={onCancel}
+                        className="w-full py-3.5 rounded-xl bg-white/[0.04] text-white/50 text-[13px]"
+                    >
+                        Annuler
+                    </button>
                 </div>
             </motion.div>
         </div>
@@ -480,25 +542,19 @@ function DeleteModal({ count, onConfirm, onCancel }: { count: number, onConfirm:
 
 function CopySuccessModal({ onClose }: { onClose: () => void }) {
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 pointer-events-none">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] pointer-events-none">
             <motion.div
-                initial={{ y: 20, opacity: 0, scale: 0.9 }}
+                initial={{ y: 12, opacity: 0, scale: 0.95 }}
                 animate={{ y: 0, opacity: 1, scale: 1 }}
-                exit={{ y: -20, opacity: 0, scale: 0.9 }}
-                className="bg-white text-black px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-white/20 pointer-events-auto"
+                exit={{ y: 12, opacity: 0, scale: 0.95 }}
+                className="bg-white text-black px-6 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 pointer-events-auto"
             >
-                <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white">
-                    <Check size={18} strokeWidth={3} />
+                <div className="w-6 h-6 rounded-full bg-emerald-500 flex items-center justify-center text-white">
+                    <Check size={13} strokeWidth={3} />
                 </div>
-                <div className="flex flex-col">
-                    <span className="font-black uppercase italic text-sm tracking-tighter">Lien copié !</span>
-                    <span className="text-[10px] text-gray-500 font-bold uppercase">Prêt à être partagé</span>
-                </div>
-                <button
-                    onClick={onClose}
-                    className="ml-4 p-1 hover:bg-gray-100 rounded-lg transition-colors"
-                >
-                    <X size={14} className="text-gray-400" />
+                <span className="text-[13px] font-semibold">Lien copié dans le presse-papier</span>
+                <button onClick={onClose} className="ml-2 p-1 hover:bg-black/5 rounded-lg">
+                    <X size={13} className="text-black/40" />
                 </button>
             </motion.div>
         </div>
@@ -508,10 +564,10 @@ function CopySuccessModal({ onClose }: { onClose: () => void }) {
 export default function DashboardPage() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen bg-[#030712] flex items-center justify-center">
-                <div className="flex flex-col items-center gap-4">
-                    <div className="w-10 h-10 border-2 border-white/10 border-t-white rounded-full animate-spin" />
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-500">Chargement du panel...</p>
+            <div className="min-h-screen bg-[#1A0F14] flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3">
+                    <div className="w-8 h-8 border border-white/10 border-t-white/60 rounded-full animate-spin" />
+                    <p className="text-[11px] text-white/30">Chargement...</p>
                 </div>
             </div>
         }>

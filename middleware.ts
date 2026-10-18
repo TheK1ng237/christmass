@@ -4,9 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
     let response = NextResponse.next({
-        request: {
-            headers: request.headers,
-        },
+        request: { headers: request.headers },
     })
 
     const supabase = createServerClient(
@@ -14,16 +12,10 @@ export async function middleware(request: NextRequest) {
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
         {
             cookies: {
-                getAll() {
-                    return request.cookies.getAll()
-                },
+                getAll() { return request.cookies.getAll() },
                 setAll(cookiesToSet) {
                     cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-                    response = NextResponse.next({
-                        request: {
-                            headers: request.headers,
-                        },
-                    })
+                    response = NextResponse.next({ request: { headers: request.headers } })
                     cookiesToSet.forEach(({ name, value, options }) =>
                         response.cookies.set(name, value, options)
                     )
@@ -32,13 +24,10 @@ export async function middleware(request: NextRequest) {
         }
     )
 
-    // Vérification sécurisée de l'utilisateur
     const { data: { user } } = await supabase.auth.getUser()
     const pathname = request.nextUrl.pathname
 
-    // --- LOGIQUE DE PROTECTION DES ROUTES ---
-
-    // 1. Routes privées (Dashboard, Création de carte, Batch Business)
+    // 1. Routes privées utilisateurs
     const isProtectedRoute =
         pathname.startsWith('/dashboard') ||
         pathname.startsWith('/create') ||
@@ -46,12 +35,28 @@ export async function middleware(request: NextRequest) {
 
     if (isProtectedRoute && !user) {
         const url = new URL('/auth', request.url)
-        // On mémorise la destination pour y retourner après le login
         url.searchParams.set('next', pathname)
         return NextResponse.redirect(url)
     }
 
+    // 2. Route admin — réservée à l'admin
+    if (pathname.startsWith('/admin')) {
+        if (!user) {
+            const url = new URL('/auth', request.url)
+            url.searchParams.set('next', pathname)
+            return NextResponse.redirect(url)
+        }
+        const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase()
+        const isAdmin =
+            user.email?.toLowerCase() === adminEmail ||
+            user.user_metadata?.role === 'admin'
 
+        if (!isAdmin) {
+            return NextResponse.redirect(new URL('/', request.url))
+        }
+    }
+
+    // 3. Redirige utilisateur connecté hors de /auth
     if (pathname.startsWith('/auth') && user) {
         const nextPath = request.nextUrl.searchParams.get('next') || '/dashboard'
         return NextResponse.redirect(new URL(nextPath, request.url))
@@ -61,6 +66,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-    // Matcher optimisé pour exclure les assets et l'api
     matcher: ['/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 }

@@ -1,24 +1,25 @@
 
 'use client';
 
-import React, {useState, useMemo, useRef,Suspense} from 'react';
+import React, {useState,Suspense} from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     UploadCloud, Users,
     FileImage, Zap,
-    Image, Briefcase, CheckCircle2, Send, Eye,
+    Briefcase, CheckCircle2, Send, Eye,
      Download, X, Plus, Check, Loader2
 } from 'lucide-react';
 
-import { useEventTemplates } from '@/components/TemplateRoutes';
-import {BatchContact, BatchGenerationResult, EventType, Language, TemplateId} from "@/lib/types";
+import {BatchContact, BatchGenerationResult, EventType, Language} from "@/lib/types";
 import {batchGenerateCards} from "@/lib/Services/batchService";
-import { getTemplateComponent } from '@/components/TemplateRoutes';
 import { EVENTS } from '@/lib/events';
 import { useSearchParams } from 'next/navigation';
 import {useAuth} from "@/lib/auth/AuthContext";
 import { toPng } from 'html-to-image';
 import JSZip from 'jszip';
+import { CardRenderer } from '@/components/cards/card-renderer';
+import type { CardDesign } from '@/lib/schemas/card-design';
+import { normalizeCardDesign } from '@/lib/cards/normalize-card-design';
 
 function BatchContent() {
 
@@ -32,28 +33,45 @@ function BatchContent() {
     const [step, setStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [isSharingAll, setIsSharingAll] = useState(false);
-    const [templateId, setTemplateId] = useState<TemplateId>(1);
+    const [layout, setLayout] = useState<CardDesign['layout']>('luxury-stationery');
     const [contacts, setContacts] = useState<BatchContact[]>([]);
-    const [language, setLanguage] = useState<Language>('fr');
+    const language: Language = 'fr';
 
-    const [eventType, setEventType] = useState<EventType>(eventId);
+    const eventType = eventId;
     const { user } = useAuth();
     const [logoUrl, setLogoUrl] = useState<string | null>(null);
     const [dragActive, setDragActive] = useState(false);
     const [selectedContacts, setSelectedContacts] = useState<Set<number>>(new Set());
     const [results, setResults] = useState<BatchGenerationResult[]>([]);
     const [businessName, setBusinessName] = useState<string>('');
-    const templates = useEventTemplates(eventType, language);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-    const hiddenRenderRef = useRef<HTMLDivElement>(null);
     const [isExporting, setIsExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState(0);
 
-    // Template sélectionné pour l'aperçu
-    const SelectedTemplate = useMemo(() =>
-            getTemplateComponent(eventType, templateId),
-        [eventType, templateId]);
+    const previewDesign: CardDesign = {
+        id: layout === 'editorial-poster' ? 'design-b' : 'design-a',
+        concept: businessName || (language === 'fr' ? 'Votre entreprise' : 'Your business'),
+        layout,
+        palette: {
+            background: layout === 'editorial-poster' ? '#2D1C21' : '#F7F3EE',
+            primary: currentEvent.colors.primary,
+            accent: currentEvent.colors.accent,
+            text: layout === 'editorial-poster' ? '#F8FAFC' : '#1F2937',
+        },
+        typography: {
+            headingStyle: layout === 'editorial-poster' ? 'display' : 'serif',
+            bodyStyle: layout === 'editorial-poster' ? 'sans' : 'serif',
+        },
+        decorations: [{ type: layout === 'editorial-poster' ? 'stars' : 'frame', position: 'corners' }],
+        content: {
+            title: contacts[0]?.name || (language === 'fr' ? 'Nom du client' : 'Client name'),
+            message: language === 'fr'
+                ? 'Un message chaleureux et personnalisé pour chacun de vos contacts.'
+                : 'A warm, personalized greeting for each of your contacts.',
+            signature: businessName || (language === 'fr' ? 'Avec nos meilleurs vœux' : 'Best wishes'),
+        },
+    };
 
     const handleFileUpload = (file: File | null): void => {
         if (!file) return;
@@ -174,7 +192,7 @@ function BatchContent() {
             const results = await batchGenerateCards({
                 contacts,
                 language,
-                template_id: templateId,
+                layout,
                 eventType,
                 logoUrl: logoUrl ?? undefined,
                 businessName: businessName,
@@ -212,27 +230,13 @@ function BatchContent() {
     const toggleContact = (index: number): void => {
         setSelectedContacts(prev => {
             const next = new Set(prev);
-            next.has(index) ? next.delete(index) : next.add(index);
+            if (next.has(index)) {
+                next.delete(index);
+            } else {
+                next.add(index);
+            }
             return next;
         });
-    };
-
-
-    const shareOnWhatsApp = (result: BatchGenerationResult) => {
-        const phone = result.contact.phone ? result.contact.phone.replace(/\D/g, '') : '';
-        const url = result.shareUrl || `${window.location.origin}/preview/${result.card?.share_token}`;
-
-        const message = encodeURIComponent(
-            `✨ Bonjour ${result.contact.name} !\n\n` +
-            `J'ai créé une carte de vœux spéciale pour vous. \n` +
-            `Découvrez-la ici : ${url}`
-        );
-
-        if (phone) {
-            window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
-        } else {
-            console.warn(`Pas de numéro pour ${result.contact.name}`);
-        }
     };
 
     const handleDownloadCard = async (result: BatchGenerationResult, index: number) => {
@@ -313,32 +317,8 @@ function BatchContent() {
     };
 
 
-    async function createPngFromData(result: any, Template: any) {
-        const div = document.createElement('div');
-        div.style.position = 'fixed';
-        div.style.left = '-9999px';
-        div.style.top = '0';
-        div.style.width = '600px';
-        div.style.height = '800px';
-        document.body.appendChild(div);
-
-
-
-        const element = document.getElementById(`card-render-${result.contact.name}`);
-        if (!element) return null;
-
-        const dataUrl = await toPng(element, {
-            pixelRatio: 2,
-            skipFonts: false,
-            backgroundColor: '#000'
-        });
-
-        return dataUrl;
-    }
-
-
     return (
-        <div className="min-h-screen bg-[#030712] text-white pt-24 pb-20">
+        <div className="min-h-screen bg-[#1A0F14] text-white pt-24 pb-20">
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
                 {/* Header avec progression */}
@@ -485,54 +465,30 @@ function BatchContent() {
                                     </h3>
 
                                     <div className="space-y-6">
-                                        {/* 🔥 FIX 4: Afficher les VRAIS templates avec miniatures */}
                                         <div className="space-y-3">
                                             <label className="text-xs font-black uppercase text-gray-500 tracking-widest">
                                                 Style de carte
                                             </label>
                                             <div className="grid grid-cols-2 gap-3">
-                                                {templates.map((template) => {
-                                                    const TemplatePreview = template.Component;
-
-                                                    return (
-                                                        <button
-                                                            key={template.id}
-                                                            onClick={() => setTemplateId(template.id)}
-                                                            className={`relative p-2 rounded-xl border-2 transition-all ${
-                                                                templateId === template.id
-                                                                    ? 'border-white/40 bg-white/10 shadow-lg'
-                                                                    : 'border-white/10 bg-white/5 hover:border-white/20'
-                                                            }`}
-                                                        >
-
-                                                            <div className="aspect-[3/4] bg-black/20 rounded-lg mb-2 overflow-hidden">
-
-                                                                <div className="scale-[0.15] origin-top-left w-[666%] h-[666%]">
-                                                                    <TemplatePreview
-                                                                        name={contacts[0]?.name || "Preview"}
-                                                                        poem="Aperçu du template"
-                                                                        imageUrl={logoUrl || undefined}
-                                                                        language={language}
-                                                                        isBusiness={!!businessName}
-                                                                    />
-                                                                </div>
-                                                            </div>
-
-                                                            <p className="text-xs font-bold text-center">
-                                                                {template.label}
-                                                            </p>
-
-                                                            {templateId === template.id && (
-                                                                <div
-                                                                    className="absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center text-white shadow-lg"
-                                                                    style={{ backgroundColor: primaryColor }}
-                                                                >
-                                                                    <Check size={14} />
-                                                                </div>
-                                                            )}
-                                                        </button>
-                                                    );
-                                                })}
+                                                {([
+                                                    { id: 'luxury-stationery', label: 'Papeterie de luxe' },
+                                                    { id: 'editorial-poster', label: 'Affiche éditoriale' },
+                                                ] as const).map((option) => (
+                                                    <button
+                                                        key={option.id}
+                                                        onClick={() => setLayout(option.id)}
+                                                        className={`rounded-xl border-2 p-3 text-sm font-bold transition-all ${
+                                                            layout === option.id
+                                                                ? 'border-white/40 bg-white/10 shadow-lg'
+                                                                : 'border-white/10 bg-white/5 hover:border-white/20'
+                                                        }`}
+                                                    >
+                                                        {option.label}
+                                                        {layout === option.id && (
+                                                            <Check className="mx-auto mt-2" size={16} style={{ color: primaryColor }} />
+                                                        )}
+                                                    </button>
+                                                ))}
                                             </div>
                                         </div>
 
@@ -643,7 +599,7 @@ function BatchContent() {
                                 </div>
 
                                 <motion.div
-                                    key={`${eventType}-${templateId}-${logoUrl}`}
+                                    key={`${eventType}-${layout}-${logoUrl}`}
                                     initial={{ opacity: 0, scale: 0.9, y: 20 }}
                                     animate={{ opacity: 1, scale: 1, y: 0 }}
                                     transition={{ duration: 0.4, ease: "easeOut" }}
@@ -655,14 +611,7 @@ function BatchContent() {
                                     />
 
                                     <div className="relative shadow-[0_50px_100px_rgba(0,0,0,0.6)] rounded-[2.5rem] overflow-hidden scale-[0.65] sm:scale-[0.75] lg:scale-[0.85] xl:scale-95 origin-top border border-white/10">
-                                        <SelectedTemplate
-                                            name={contacts[0]?.name || "Nom du Client"}
-                                            poem="L'intelligence artificielle rédigera ici un message unique et chaleureux pour chacun de vos contacts, en respectant le ton de votre événement."
-                                            imageUrl={logoUrl || undefined}
-                                            language={language}
-                                            isBusiness={!!businessName}
-
-                                        />
+                                        <CardRenderer design={previewDesign} imageUrl={logoUrl || undefined} />
                                     </div>
 
                                     <p className="mt-8 text-center text-[10px] font-bold text-gray-500 uppercase tracking-widest opacity-50">
@@ -796,12 +745,13 @@ function BatchContent() {
 
                                                 <div className="fixed -left-[2000px] top-0 pointer-events-none">
                                                     <div id={`card-capture-${idx}`} style={{ width: '600px', height: '800px' }}>
-                                                        <SelectedTemplate
-                                                            name={result.contact.name}
-                                                            poem={result.card?.poem || ""}
+                                                        <CardRenderer
+                                                            design={normalizeCardDesign(result.card?.poem, {
+                                                                name: result.contact.name,
+                                                                eventType,
+                                                                language,
+                                                            })}
                                                             imageUrl={logoUrl || undefined}
-                                                            language={language}
-                                                            isBusiness={!!businessName}
                                                         />
                                                     </div>
                                                 </div>
@@ -856,7 +806,7 @@ function BatchContent() {
                                 initial={{ scale: 0.9, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
                                 exit={{ scale: 0.9, opacity: 0 }}
-                                className="bg-[#111827] border border-white/10 p-8 rounded-[2.5rem] max-w-sm w-full text-center shadow-2xl"
+                                className="bg-[#2D1C21] border border-white/10 p-8 rounded-[2.5rem] max-w-sm w-full text-center shadow-2xl"
                             >
                                 <div className="w-20 h-20 bg-green-500/20 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
                                     <Check size={40} strokeWidth={3} />
@@ -912,7 +862,7 @@ export default function BatchPage() {
     return (
 
         <Suspense fallback={
-            <div className="min-h-screen bg-[#030712] flex items-center justify-center">
+            <div className="min-h-screen bg-[#1A0F14] flex items-center justify-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-purple-500"></div>
                 chargement...
             </div>

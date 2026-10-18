@@ -3,15 +3,14 @@ import {
     BatchContact,
     BatchGenerationResult,
     Language,
-    TemplateId,
     EventType,
 } from '@/lib/types';
-import { supabase } from '@/lib/supabaseClient';
+import type { CardDesign } from '@/lib/schemas/card-design';
 
 interface BatchGenerateParams {
     contacts: BatchContact[];
     language: Language;
-    template_id: TemplateId;
+    layout: CardDesign['layout'];
     eventType: EventType;
     logoUrl?: string;
     businessName?: string;

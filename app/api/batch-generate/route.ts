@@ -1,118 +1,149 @@
-// app/api/batch-generate/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-import { generateSinglePoem } from '@/lib/gemini';
+
+import { generateCardDesigns } from '@/lib/ai/generate-card-designs';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import { generateShareToken } from '@/lib/utils';
-import { Language, Gender, TemplateId, BatchGenerationResult, EventType } from '@/lib/types';
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import type { BatchContact, BatchGenerationResult, EventType, Language } from '@/lib/types';
+import type { CardDesign } from '@/lib/schemas/card-design';
+
+const eventTypes: EventType[] = [
+    'christmas',
+    'newyear',
+    'valentine',
+    'easter',
+    'birthday',
+    'mothersday',
+    'fathersday',
+];
+
+const languages: Language[] = ['fr', 'en'];
+const layouts: CardDesign['layout'][] = [
+    'luxury-stationery',
+    'editorial-poster',
+    'botanical-frame',
+    'illustrated-scene',
+    'hero-object',
+    'side-cluster',
+    'type-stack',
+    'scene-panel',
+];
+
+function isLanguage(value: unknown): value is Language {
+    return typeof value === 'string' && languages.includes(value as Language);
+}
+
+function isEventType(value: unknown): value is EventType {
+    return typeof value === 'string' && eventTypes.includes(value as EventType);
+}
+
+function isLayout(value: unknown): value is CardDesign['layout'] {
+    return typeof value === 'string' && layouts.includes(value as CardDesign['layout']);
+}
 
 export async function POST(request: NextRequest) {
-    console.log('🚀 [BATCH] Démarrage de la génération groupée optimisée...');
-
     try {
         const body = await request.json();
         const {
             contacts,
             language,
-            template_id,
+            layout,
             eventType,
             logoUrl,
             userId,
-            businessName
-        } = body;
+            businessName,
+        } = body as {
+            contacts?: BatchContact[];
+            language?: Language;
+            layout?: CardDesign['layout'];
+            eventType?: EventType;
+            logoUrl?: string;
+            userId?: string;
+            businessName?: string;
+        };
 
-        // --- VALIDATIONS ---
-        if (!contacts || !Array.isArray(contacts) || contacts.length === 0) {
-            return NextResponse.json({ error: 'Contacts array is required' }, { status: 400 });
+        if (
+            !Array.isArray(contacts) ||
+            contacts.length === 0 ||
+            contacts.length > 100 ||
+            !isLanguage(language) ||
+            !isLayout(layout) ||
+            !isEventType(eventType)
+        ) {
+            return NextResponse.json({ error: 'Paramètres de génération groupée invalides' }, { status: 400 });
         }
 
-        /**
-         * 💡 STRATÉGIE D'ÉCONOMIE DE TOKENS :
-         * On demande à Gemini de générer UN SEUL poème qui contient un marqueur spécial [[NAME]].
-         * Ensuite, on remplace ce marqueur localement pour chaque contact.
-         */
-        const placeholder = "[[NAME]]";
-
-        // On construit le nom de référence pour Gemini :
-        // Si businessName est fourni, on peut faire un mix "[[NAME]] de la part de businessName"
-        // ou simplement demander à Gemini d'utiliser le placeholder.
-
-
-        let basePoemData: any;
-        try {
-            basePoemData = await generateSinglePoem(
-                businessName || "notre entreprise",
-                'neutral' as Gender,
-                language as Language,
-                eventType as EventType,
-                template_id as TemplateId
-            );
-        } catch (error: any) {
-            console.error('❌ [GEMINI] Erreur API :', error.message);
-            return NextResponse.json({ error: 'Failed to generate template' }, { status: 500 });
-        }
-
-        const templateText = basePoemData.poem;
         const results: BatchGenerationResult[] = [];
-
-        // --- 2. PERSONNALISATION LOCALE & INSERTION ---
-        console.log(`🔄 [PROCESS] Personnalisation de ${contacts.length} cartes...`);
+        const designs = await generateCardDesigns({
+            occasion: eventType,
+            occasionId: eventType,
+            recipient: '[[NAME]]',
+            tone: 'warm',
+            language,
+            message: businessName
+                ? language === 'fr'
+                    ? `Un message chaleureux de la part de ${businessName}.`
+                    : `A warm greeting from ${businessName}.`
+                : undefined,
+        });
+        const requestedDesign = designs.find((candidate) => candidate.layout === layout) ?? designs[0];
 
         for (const contact of contacts) {
             try {
-                const { name, gender, phone, email } = contact;
-
-                if (!name) {
-                    results.push({ success: false, error: 'Missing name', contact });
+                if (!contact?.name?.trim() || !['boy', 'girl', 'neutral'].includes(contact.gender)) {
+                    results.push({ success: false, error: 'Contact invalide', contact });
                     continue;
                 }
 
-
-                let personalizedPoem = templateText.replace(new RegExp('\\[\\[NAME\\]\\]', 'g'), name);
-
-                if (businessName && personalizedPoem.includes(businessName) && !personalizedPoem.includes(name)) {
-                }
-
+                const personalize = (text: string) => text.replaceAll('[[NAME]]', contact.name);
+                const design: CardDesign = {
+                    ...requestedDesign,
+                    content: {
+                        ...requestedDesign.content,
+                        title: personalize(requestedDesign.content.title) || contact.name,
+                        message: personalize(requestedDesign.content.message),
+                        signature: personalize(requestedDesign.content.signature),
+                    },
+                };
                 const shareToken = generateShareToken();
-
-                // INSERTION DANS LA DB
-                const { data, error: dbError } = await supabaseAdmin
+                const { data, error } = await supabaseAdmin
                     .from('cards')
                     .insert({
-                        name,
-                        gender,
+                        name: contact.name,
+                        gender: contact.gender,
                         language,
-                        template_id,
                         event_type: eventType,
-                        poem: personalizedPoem,
+                        poem: JSON.stringify(design),
                         image_url: logoUrl || null,
                         share_token: shareToken,
                         user_id: userId || null,
                         business_name: businessName || null,
-                        phone: phone || null
+                        phone: contact.phone || null,
                     })
                     .select()
                     .single();
 
-                if (dbError) {
-                    results.push({ success: false, error: 'DB Error', contact });
-                } else {
-                    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-                    results.push({
-                        success: true,
-                        card: data,
-                        contact,
-                        shareUrl: `${baseUrl}/preview/${shareToken}`
-                    });
-                }
-            } catch (error: any) {
-                results.push({ success: false, error: 'Processing error', contact });
+                if (error) throw error;
+
+                const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+                results.push({
+                    success: true,
+                    card: data,
+                    contact,
+                    shareUrl: `${baseUrl}/preview/${shareToken}`,
+                });
+            } catch (error) {
+                console.error(`Échec de génération pour ${contact?.name ?? 'contact inconnu'}`, error);
+                results.push({
+                    success: false,
+                    error: error instanceof Error ? error.message : 'Échec de génération',
+                    contact,
+                });
             }
         }
 
-        return NextResponse.json({ results });
-
-    } catch (error: any) {
-        console.error('💥 [CRITICAL] Erreur fatale:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json({ results }, { headers: { 'Cache-Control': 'no-store' } });
+    } catch (error) {
+        console.error('Erreur de génération groupée', error);
+        return NextResponse.json({ error: 'La génération groupée a échoué.' }, { status: 500 });
     }
 }
