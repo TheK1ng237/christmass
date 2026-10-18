@@ -46,7 +46,7 @@ export const metadata: Metadata = {
         description: 'Créez une carte de vœux personnalisée avec son message et son univers graphique.',
     },
     twitter: {
-        card: 'summary',
+        card: 'summary_large_image',
         title: 'Make & Wish | Cartes de vœux créées avec l’IA',
         description: 'Créez une carte de vœux personnalisée avec son message et son univers graphique.',
     },
