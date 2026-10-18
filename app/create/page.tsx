@@ -1,101 +1,135 @@
 'use client';
 
-import React, { useState, useEffect ,Suspense} from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     ArrowLeft,
-    Calendar,
     Check,
-    CheckCircle2,
-    Eye,
-    ImageIcon,
-    Languages,
-    Sparkles,
+    Pencil,
+    RefreshCw,
     Upload,
-    User,
     Wand2,
     X
 } from "lucide-react";
 
 import Button from '@/components/ui/Button';
-import LanguageSelector from '@/components/LanguageSelector';
-import GenderSelector from '@/components/GenderSelector';
-import { useEventTemplates } from '@/components/TemplateRoutes';
-import { getEventConfig } from '@/lib/events';
-import { Language, Gender, GeneratedPoem, TemplateId, EventType } from '@/lib/types';
+import { getAvailableEvents, getEventConfig } from '@/lib/events';
+import { buildSampleDesigns } from '@/lib/cards/occasion-profile';
+import type { CardDesign } from '@/lib/schemas/card-design';
+import { Language, Gender, EventType } from '@/lib/types';
+import { CardRenderer } from '@/components/cards/card-renderer';
 
 import { eventService } from '@/lib/Services/eventService';
-import {useAuth} from "@/lib/auth/AuthContext";
+import { useAuth } from "@/lib/auth/AuthContext";
+
+type Tone = 'warm' | 'formal' | 'funny' | 'emotional' | 'spiritual';
+
+const TONES: { id: Tone; fr: string; en: string }[] = [
+    { id: 'warm', fr: 'Chaleureux', en: 'Warm' },
+    { id: 'emotional', fr: 'Ému', en: 'Heartfelt' },
+    { id: 'funny', fr: 'Drôle', en: 'Funny' },
+    { id: 'formal', fr: 'Élégant', en: 'Formal' },
+    { id: 'spiritual', fr: 'Spirituel', en: 'Spiritual' },
+];
+
+const RELATION_HINTS: Record<EventType, { fr: string; en: string }> = {
+    christmas: { fr: 'ma mère, mon collègue Paul, mes voisins…', en: 'my mother, my colleague Paul, my neighbours…' },
+    newyear: { fr: 'mes amis, mon équipe, ma famille…', en: 'my friends, my team, my family…' },
+    valentine: { fr: 'mon mari, ma fiancée, mon amour…', en: 'my husband, my fiancée, my love…' },
+    easter: { fr: 'mes grands-parents, mes cousins…', en: 'my grandparents, my cousins…' },
+    birthday: { fr: 'ma meilleure amie, mon frère…', en: 'my best friend, my brother…' },
+    mothersday: { fr: 'ma mère, ma belle-mère, ma grand-mère…', en: 'my mother, my mother-in-law, my grandmother…' },
+    fathersday: { fr: 'mon père, mon beau-père, mon oncle…', en: 'my father, my stepfather, my uncle…' },
+};
+
+const fieldClass =
+    'w-full rounded-xl border border-[#F6EFE4]/15 bg-[#F6EFE4]/[0.04] px-4 py-3.5 text-lg text-[#F6EFE4] placeholder:text-[#F6EFE4]/30 focus:outline-none focus:border-[#C9A15B]/70 transition-colors';
+
+function Label({ children, hint }: { children: React.ReactNode; hint?: string }) {
+    return (
+        <div className="mb-2 flex items-baseline justify-between gap-3">
+            <span className="text-sm font-semibold text-[#F6EFE4]/80">{children}</span>
+            {hint && <span className="text-xs text-[#F6EFE4]/40">{hint}</span>}
+        </div>
+    );
+}
 
 function CreateContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const { user } = useAuth();
-    // UI State
+
     const [step, setStep] = useState<'form' | 'preview'>('form');
     const [loading, setLoading] = useState(false);
-    const [selectingTemplateId, setSelectingTemplateId] = useState<TemplateId | null>(null);
+    const [selectingDesignId, setSelectingDesignId] = useState<CardDesign['id'] | null>(null);
     const [error, setError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [editingId, setEditingId] = useState<CardDesign['id'] | null>(null);
 
-    // Form State
+    // Formulaire : occasion, destinataire, ton, message facultatif
+    const [eventType, setEventType] = useState<EventType>('christmas');
+    const [relation, setRelation] = useState('');
     const [name, setName] = useState('');
+    const [tone, setTone] = useState<Tone>('warm');
+    const [message, setMessage] = useState('');
     const [language, setLanguage] = useState<Language>('fr');
     const [gender, setGender] = useState<Gender>('neutral');
-    const [eventType, setEventType] = useState<EventType>('christmas');
     const [image, setImage] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string>('');
-    const [poems, setPoems] = useState<GeneratedPoem[]>([]);
+    const [designs, setDesigns] = useState<CardDesign[]>([]);
     const [imageUrl, setImageUrl] = useState<string>('');
 
     useEffect(() => {
-        const event = searchParams.get('event') as EventType;
-        if (event) {
+        const event = searchParams.get('event') as EventType | null;
+        if (event && getAvailableEvents().some((item) => item.id === event)) {
             setEventType(event);
         }
     }, [searchParams]);
 
     useEffect(() => {
-        if (eventType === 'mothersday') {
-            setGender('girl');
-        } else if (eventType === 'fathersday') {
-            setGender('boy');
-        } else {
-            setGender('neutral');
-        }
+        if (eventType === 'mothersday') setGender('girl');
+        else if (eventType === 'fathersday') setGender('boy');
+        else setGender('neutral');
     }, [eventType]);
 
-
-    const templates = useEventTemplates(eventType, language);
+    const fr = language === 'fr';
     const eventConfig = getEventConfig(eventType);
-    const Icon = eventConfig.icon;
+    const sample = useMemo(() => buildSampleDesigns(eventType, language)[0], [eventType, language]);
+    const photoForCard = imagePreview || imageUrl || undefined;
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                setError(language === 'fr' ? 'Image trop lourde (max 5Mo)' : 'Image too large (max 5MB)');
-                return;
-            }
-            setImage(file);
-            const reader = new FileReader();
-            reader.onloadend = () => setImagePreview(reader.result as string);
-            reader.readAsDataURL(file);
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) {
+            setError(fr ? 'Image trop lourde (max 5 Mo)' : 'Image too large (max 5MB)');
+            return;
+        }
+        setError('');
+        setImage(file);
+        setImageUrl('');
+        const reader = new FileReader();
+        reader.onloadend = () => setImagePreview(reader.result as string);
+        reader.readAsDataURL(file);
+    };
+
+    const handleError = (err: unknown) => {
+        console.error("Erreur:", err);
+        const text = err instanceof Error ? err.message : 'Une erreur inattendue est survenue.';
+        if (text.includes('429')) {
+            setError(fr ? "L'IA est très sollicitée. Réessayez dans une minute." : "The AI is busy. Try again in a minute.");
+        } else {
+            setError(text);
         }
     };
 
     const handleGenerate = async () => {
         if (!name.trim()) {
-            setError(language === 'fr' ? 'Le nom est requis' : 'Name is required');
+            setError(fr ? 'Indiquez le prénom du destinataire.' : 'Enter the recipient\'s first name.');
             return;
         }
-
-        // VERIFICATION CRUCIALE : On empêche la génération si l'user n'est pas là
         if (!user) {
-            setError(language === 'fr'
-                ? 'Vous devez être connecté pour créer une carte'
-                : 'You must be logged in to create a card');
+            setError(fr ? 'Connectez-vous pour créer une carte.' : 'Log in to create a card.');
             return;
         }
 
@@ -104,64 +138,46 @@ function CreateContent() {
 
         try {
             let currentImageUrl = imageUrl;
-
-            // 1. Upload image si présente
-            if (image) {
+            if (image && !imageUrl) {
                 currentImageUrl = await eventService.uploadImage(image);
                 setImageUrl(currentImageUrl);
             }
 
-
-            const generatedPoems = await eventService.generatePoems({
-                name,
-                gender,
+            const generatedDesigns = await eventService.generateCardDesigns({
+                occasion: eventConfig.name[language],
+                occasionId: eventType,
+                recipient: name.trim(),
+                relation: relation.trim() || undefined,
+                tone,
+                message: message.trim() || undefined,
                 language,
-                eventType,
-                user_id: user.id
             });
 
-            setPoems(generatedPoems);
+            setDesigns(generatedDesigns);
+            setEditingId(null);
             setStep('preview');
             window.scrollTo({ top: 0, behavior: 'smooth' });
-
-        } catch (err: any) {
+        } catch (err: unknown) {
             handleError(err);
         } finally {
             setLoading(false);
         }
     };
 
+    const updateContent = (id: CardDesign['id'], patch: Partial<CardDesign['content']>) => {
+        setDesigns((current) =>
+            current.map((d) => (d.id === id ? { ...d, content: { ...d.content, ...patch } } : d))
+        );
+    };
 
-
-
-    const handleSelectTemplate = async (templateId: TemplateId) => {
-
+    const handleSelectDesign = async (design: CardDesign) => {
         if (isSubmitting) return;
         setIsSubmitting(true);
-
-        setSelectingTemplateId(templateId);
+        setSelectingDesignId(design.id);
         try {
-            // On cherche le poème qui correspond EXACTEMENT à l'ID du bouton cliqué
-            const selectedPoem = poems.find(p => p.template_id === templateId);
-
-            if (!selectedPoem) {
-                console.error("ERREUR: Aucun poème trouvé pour l'ID", templateId);
-                setSelectingTemplateId(null);
-                return;
-            }
-
-            const payload = {
-                name,
-                templateId: templateId, // <--- C'est lui qu'on surveille
-                poem: selectedPoem.poem,
-                eventType
-            };
-            console.log("PAYLOAD ENVOYÉ À L'API :", payload);
-
             if (!user?.id) {
-                setError(language === 'fr'
-                    ? "Vous devez être connecté pour enregistrer cette carte."
-                    : "You must be logged in to save this card.");
+                setError(fr ? "Connectez-vous pour enregistrer cette carte." : "Log in to save this card.");
+                setSelectingDesignId(null);
                 return;
             }
 
@@ -170,80 +186,55 @@ function CreateContent() {
                 gender,
                 language,
                 eventType,
-                templateId: templateId, // On utilise bien l'ID passé en paramètre
-                poem: selectedPoem.poem,
-                imageUrl,
+                design,
+                imageUrl: imageUrl || null,
                 user_id: user.id,
             });
 
             router.push(`/preview/${data.card.share_token}`);
         } catch (err) {
-            setSelectingTemplateId(null);
+            handleError(err);
+            setSelectingDesignId(null);
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
-    const handleError = (err: any) => {
-        console.error("Erreur:", err);
-        if (err.message.includes('429')) {
-            setError(language === 'fr' ? "L'IA est surchargée. Réessayez dans 1 min." : "AI busy. Try again in 1 min.");
-        } else {
-            setError(err.message);
-        }
-    };
     return (
-        <div className="min-h-screen bg-[#030712] text-white pb-20 selection:bg-christmas-red/30 mt-20">
-            {/* Background Glows - ⭐ ADAPTÉS AUX COULEURS DE L'ÉVÉNEMENT */}
-            <div className="fixed inset-0 -z-10 overflow-hidden">
-                <div
-                    className="absolute top-0 right-0 w-[40%] h-[40%] blur-[120px]"
-                    style={{
-                        backgroundColor: `${eventConfig.colors.primary}10`
-                    }}
-                />
-                <div
-                    className="absolute bottom-0 left-0 w-[30%] h-[30%] blur-[120px]"
-                    style={{
-                        backgroundColor: `${eventConfig.colors.secondary}05`
-                    }}
-                />
-            </div>
+        <div className="min-h-screen bg-[#1A0F14] text-[#F6EFE4] pb-24 pt-24">
+            <div
+                className="pointer-events-none fixed inset-0 -z-10"
+                style={{
+                    background: `radial-gradient(60% 50% at 80% 0%, ${eventConfig.colors.primary}22, transparent 70%), radial-gradient(50% 40% at 0% 100%, ${eventConfig.colors.accent}14, transparent 70%)`,
+                }}
+            />
 
-            <div className="fixed top-0 left-0 w-full h-1.5 bg-white/5 z-50">
-                <motion.div
-                    className="h-full shadow-lg"
-                    style={{
-                        background: `linear-gradient(to right, ${eventConfig.colors.primary}, ${eventConfig.colors.accent})`
-                    }}
-                    animate={{ width: step === 'form' ? '40%' : '100%' }}
-                />
-            </div>
-
-            <div className="max-w-6xl mx-auto px-6 pt-12">
-                {/* Header Navigation */}
-                <header className="flex justify-between items-center mb-16">
+            <div className="mx-auto max-w-7xl px-6 pt-8">
+                <header className="mb-10 flex items-center justify-between">
                     <Button
                         variant="ghost"
-                        onClick={() => step === 'form' ? router.push('/') : setStep('form')}
-                        className="text-gray-400 hover:text-white hover:bg-white/5 rounded-xl border border-white/5"
+                        onClick={() => (step === 'form' ? router.push('/') : setStep('form'))}
+                        className="rounded-xl border border-[#F6EFE4]/10 text-[#F6EFE4]/70 hover:bg-[#F6EFE4]/5 hover:text-[#F6EFE4]"
                     >
-                        <ArrowLeft className="w-4 h-4 mr-2" />
-                        {language === 'fr' ? 'Retour' : 'Back'}
+                        <ArrowLeft className="mr-2 h-4 w-4" />
+                        {fr ? 'Retour' : 'Back'}
                     </Button>
-
-                    {/* ⭐ AFFICHAGE DE L'ÉVÉNEMENT SÉLECTIONNÉ */}
-                    <div
-                        className="flex items-center gap-3 px-5 py-3 rounded-2xl border"
-                        style={{
-                            backgroundColor: `${eventConfig.colors.primary}10`,
-                            borderColor: `${eventConfig.colors.primary}30`,
-                        }}
-                    >
-                        <span className="text-2xl">
-  <Icon />
-     </span>
-                        <span className="text-sm font-bold">
-                            {eventConfig.name[language]}
-                        </span>
+                    <div className="flex rounded-full border border-[#F6EFE4]/15 p-1" role="group" aria-label="Langue">
+                        {(['fr', 'en'] as Language[]).map((code) => (
+                            <button
+                                key={code}
+                                type="button"
+                                onClick={() => setLanguage(code)}
+                                aria-pressed={language === code}
+                                className="rounded-full px-4 py-1.5 text-sm font-semibold transition-colors"
+                                style={{
+                                    background: language === code ? '#F6EFE4' : 'transparent',
+                                    color: language === code ? '#1A0F14' : 'rgba(246,239,228,.6)',
+                                }}
+                            >
+                                {code === 'fr' ? 'Français' : 'English'}
+                            </button>
+                        ))}
                     </div>
                 </header>
 
@@ -251,121 +242,190 @@ function CreateContent() {
                     {step === 'form' ? (
                         <motion.div
                             key="form-step"
-                            initial={{ opacity: 0, y: 20 }}
+                            initial={{ opacity: 0, y: 16 }}
                             animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20 }}
-                            className="grid lg:grid-cols-12 gap-12"
+                            exit={{ opacity: 0, y: -16 }}
+                            className="grid gap-14 lg:grid-cols-12"
                         >
-                            {/* Visual Preview Column */}
-                            <div className="lg:col-span-5 space-y-8">
-                                <h1 className="text-5xl md:text-6xl font-black leading-tight tracking-tighter">
-                                    Créez un <br />
-                                    <span
-                                        className="text-transparent bg-clip-text"
-                                        style={{
-                                            backgroundImage: `linear-gradient(to right, ${eventConfig.colors.primary}, ${eventConfig.colors.accent})`
-                                        }}
-                                    >
-                                        instant magique
+                            {/* Aperçu de l'univers de l'occasion */}
+                            <div className="lg:col-span-5">
+                                <h1 className="font-serif text-5xl font-semibold leading-[1.02] tracking-tight md:text-6xl">
+                                    {fr ? 'Une carte composée pour ' : 'A card composed for '}
+                                    <span style={{ color: eventConfig.colors.accent }}>
+                                        {eventConfig.name[language].toLowerCase()}
                                     </span>
                                 </h1>
-
-                                <p className="text-gray-400 text-lg font-light leading-relaxed">
-                                    {eventConfig.description[language]}
+                                <p className="mt-5 max-w-md text-lg leading-relaxed text-[#F6EFE4]/60">
+                                    {fr
+                                        ? "Dites-nous pour qui et pour quelle occasion. Gemini imagine le concept, le message et les décors ; vous choisissez, vous retouchez, vous partagez."
+                                        : "Tell us who it's for and what the occasion is. Gemini imagines the concept, the message and the decor; you choose, tweak and share."}
                                 </p>
 
-                                {/* Photo Polaroid Preview */}
-                                <div className="relative group">
-                                    {imagePreview ? (
-                                        <motion.div
-                                            initial={{ scale: 0.8, rotate: -5 }}
-                                            animate={{ scale: 1, rotate: -2 }}
-                                            className="relative bg-white p-3 pb-12 shadow-2xl rounded-sm w-64 mx-auto md:mx-0 border border-gray-200"
-                                        >
-                                            <img src={imagePreview} className="w-full h-72 object-cover grayscale-[20%] group-hover:grayscale-0 transition-all duration-500" alt="Preview" />
-                                            <button
-                                                onClick={() => {setImage(null); setImagePreview('')}}
-                                                className="absolute top-5 right-5 bg-black/50 backdrop-blur-md text-white p-2 rounded-full hover:bg-red-500 transition-colors"
-                                            >
-                                                <X size={16} />
-                                            </button>
-                                        </motion.div>
-                                    ) : (
-                                        <div className="w-64 h-80 bg-white/5 border border-dashed border-white/10 rounded-3xl flex flex-col items-center justify-center text-gray-500 gap-4">
-                                            <ImageIcon size={48} className="opacity-20" />
-                                            <span className="text-xs uppercase tracking-widest font-bold">Aucune photo</span>
-                                        </div>
-                                    )}
+                                <div className="mx-auto mt-10 w-[min(100%,300px)] lg:mx-0">
+                                    <motion.div
+                                        key={`${eventType}-${language}-${photoForCard ? 'p' : 'n'}`}
+                                        initial={{ opacity: 0, rotate: -3, y: 12 }}
+                                        animate={{ opacity: 1, rotate: -2, y: 0 }}
+                                        transition={{ type: 'spring', bounce: 0.25 }}
+                                    >
+                                        <CardRenderer design={sample} imageUrl={photoForCard} />
+                                    </motion.div>
+                                    <p className="mt-5 text-sm text-[#F6EFE4]/40">
+                                        {fr ? 'Exemple de direction pour cette occasion.' : 'Example direction for this occasion.'}
+                                    </p>
                                 </div>
                             </div>
 
-                            {/* Form Column */}
-                            <div className="lg:col-span-7 bg-white/5 backdrop-blur-xl rounded-[3rem] p-8 md:p-12 border border-white/10 shadow-2xl">
-                                <div className="space-y-10">
-
-
-                                    {/* Selecteurs avec Icones */}
-                                    <div className="grid md:grid-cols-2 gap-8">
-                                        <div className="space-y-3">
-                                            <label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-widest px-1">
-                                                <Languages size={14} /> Langue
-                                            </label>
-                                            <LanguageSelector selected={language} onChange={setLanguage} />
-                                        </div>
-                                        <div className="space-y-3">
-                                            <label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-widest px-1">
-                                                <User size={14} /> Destinataire
-                                            </label>
-                                            {/* SI fête des mères ou pères, on affiche juste un badge informatif, sinon le sélecteur */}
-                                            {eventType === 'mothersday' || eventType === 'fathersday' ? (
-                                                <div
-                                                    className="w-full h-14 flex items-center px-6 rounded-2xl border border-white/10 bg-white/5 font-bold text-sm uppercase tracking-widest"
-                                                    style={{ color: eventConfig.colors.primary }}
-                                                >
-                                                    <CheckCircle2 size={16} className="mr-2" />
-                                                    {eventType === 'mothersday'
-                                                        ? (language === 'fr' ? 'POUR ELLE' : 'FOR HER')
-                                                        : (language === 'fr' ? 'POUR LUI' : 'FOR HIM')
-                                                    }
-                                                </div>
-                                            ) : (
-                                                <GenderSelector selected={gender} onChange={setGender} language={language} />
-                                            )}
+                            {/* Formulaire */}
+                            <div className="rounded-[2rem] border border-[#F6EFE4]/10 bg-[#241519] p-7 shadow-2xl md:p-10 lg:col-span-7">
+                                <div className="space-y-8">
+                                    <div>
+                                        <Label>{fr ? 'Occasion' : 'Occasion'}</Label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {getAvailableEvents().map((event) => {
+                                                const Icon = event.icon;
+                                                const active = event.id === eventType;
+                                                return (
+                                                    <button
+                                                        key={event.id}
+                                                        type="button"
+                                                        onClick={() => setEventType(event.id)}
+                                                        className="flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors"
+                                                        style={{
+                                                            borderColor: active ? event.colors.accent : 'rgba(246,239,228,.14)',
+                                                            background: active ? `${event.colors.primary}33` : 'transparent',
+                                                            color: active ? '#F6EFE4' : 'rgba(246,239,228,.6)',
+                                                        }}
+                                                    >
+                                                        <Icon size={16} />
+                                                        {event.name[language]}
+                                                    </button>
+                                                );
+                                            })}
                                         </div>
                                     </div>
 
-                                    <div className="space-y-3">
-                                        <label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-widest px-1">
-                                            <Sparkles size={14} /> Prénom du destinataire
-                                        </label>
-                                        <input
-                                            type="text"
-                                            placeholder="Ex: Marie, Thomas..."
-                                            value={name}
-                                            onChange={(e) => setName(e.target.value)}
-                                            className="w-full h-16 bg-white/5 border border-white/10 rounded-2xl px-6 text-xl focus:outline-none transition-all"
-                                            style={{
-                                                borderColor: `${eventConfig.colors.primary}30`,
-                                            }}
+                                    <div className="grid gap-6 md:grid-cols-2">
+                                        <div>
+                                            <Label hint={fr ? 'facultatif' : 'optional'}>
+                                                {fr ? 'Pour qui ?' : 'Who is it for?'}
+                                            </Label>
+                                            <input
+                                                type="text"
+                                                placeholder={RELATION_HINTS[eventType][language]}
+                                                value={relation}
+                                                onChange={(e) => setRelation(e.target.value)}
+                                                className={fieldClass}
+                                                maxLength={60}
+                                            />
+                                        </div>
+                                        <div>
+                                            <Label>{fr ? 'Prénom du destinataire' : 'Recipient\'s first name'}</Label>
+                                            <input
+                                                type="text"
+                                                placeholder="Marie, Thomas…"
+                                                value={name}
+                                                onChange={(e) => setName(e.target.value)}
+                                                className={fieldClass}
+                                                maxLength={100}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {eventType !== 'mothersday' && eventType !== 'fathersday' && (
+                                        <div>
+                                            <Label>{fr ? 'Genre du destinataire' : 'Recipient'}</Label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {([
+                                                    { id: 'girl', fr: 'Elle', en: 'She' },
+                                                    { id: 'boy', fr: 'Lui', en: 'He' },
+                                                    { id: 'neutral', fr: 'Neutre', en: 'Neutral' },
+                                                ] as { id: Gender; fr: string; en: string }[]).map((item) => (
+                                                    <button
+                                                        key={item.id}
+                                                        type="button"
+                                                        onClick={() => setGender(item.id)}
+                                                        className="rounded-full border px-4 py-2 text-sm font-medium transition-colors"
+                                                        style={{
+                                                            borderColor: gender === item.id ? eventConfig.colors.accent : 'rgba(246,239,228,.14)',
+                                                            background: gender === item.id ? `${eventConfig.colors.accent}22` : 'transparent',
+                                                            color: gender === item.id ? '#F6EFE4' : 'rgba(246,239,228,.6)',
+                                                        }}
+                                                    >
+                                                        {item[language]}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    <div>
+                                        <Label>{fr ? 'Ton du message' : 'Tone of the message'}</Label>
+                                        <div className="flex flex-wrap gap-2">
+                                            {TONES.map((item) => {
+                                                const active = item.id === tone;
+                                                return (
+                                                    <button
+                                                        key={item.id}
+                                                        type="button"
+                                                        onClick={() => setTone(item.id)}
+                                                        className="rounded-full border px-4 py-2 text-sm font-medium transition-colors"
+                                                        style={{
+                                                            borderColor: active ? eventConfig.colors.accent : 'rgba(246,239,228,.14)',
+                                                            background: active ? `${eventConfig.colors.accent}22` : 'transparent',
+                                                            color: active ? '#F6EFE4' : 'rgba(246,239,228,.6)',
+                                                        }}
+                                                    >
+                                                        {item[language]}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <Label hint={fr ? 'laissez vide, l’IA rédige' : 'leave empty, the AI writes it'}>
+                                            {fr ? 'Votre message' : 'Your message'}
+                                        </Label>
+                                        <textarea
+                                            rows={3}
+                                            value={message}
+                                            onChange={(e) => setMessage(e.target.value)}
+                                            maxLength={600}
+                                            placeholder={fr ? 'Quelques mots à glisser dans la carte…' : 'A few words to put in the card…'}
+                                            className={`${fieldClass} resize-none text-base`}
                                         />
                                     </div>
 
-                                    {/* Upload Area */}
-                                    <div className="space-y-3">
-                                        <label className="flex items-center gap-2 text-xs font-bold text-gray-500 uppercase tracking-widest px-1">
-                                            <ImageIcon size={14} /> Photo souvenir (Optionnel)
-                                        </label>
-                                        <label className="flex flex-col items-center justify-center w-full h-32 bg-black/20 border-2 border-dashed border-white/10 rounded-2xl cursor-pointer hover:bg-white/5 hover:border-white/20 transition-all group">
-                                            <div className="flex flex-col items-center justify-center">
-                                                <Upload className="w-8 h-8 text-gray-500 transition-colors mb-2" style={{ color: `${eventConfig.colors.accent}` }} />
-                                                <p className="text-sm text-gray-500">Glissez ou cliquez pour uploader</p>
+                                    <div>
+                                        <Label hint={fr ? 'facultatif' : 'optional'}>
+                                            {fr ? 'Photo' : 'Photo'}
+                                        </Label>
+                                        {imagePreview ? (
+                                            <div className="flex items-center gap-4 rounded-xl border border-[#F6EFE4]/10 p-3">
+                                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                                <img src={imagePreview} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                                                <span className="flex-1 truncate text-sm text-[#F6EFE4]/60">{image?.name}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setImage(null); setImagePreview(''); setImageUrl(''); }}
+                                                    className="rounded-full p-2 text-[#F6EFE4]/60 hover:bg-[#F6EFE4]/10 hover:text-[#F6EFE4]"
+                                                    aria-label={fr ? 'Retirer la photo' : 'Remove photo'}
+                                                >
+                                                    <X size={16} />
+                                                </button>
                                             </div>
-                                            <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
-                                        </label>
+                                        ) : (
+                                            <label className="flex h-24 cursor-pointer items-center justify-center gap-3 rounded-xl border border-dashed border-[#F6EFE4]/20 text-[#F6EFE4]/50 transition-colors hover:border-[#C9A15B]/60 hover:text-[#F6EFE4]/80">
+                                                <Upload size={20} style={{ color: eventConfig.colors.accent }} />
+                                                <span className="text-sm">{fr ? 'Ajouter une photo (5 Mo max)' : 'Add a photo (5MB max)'}</span>
+                                                <input type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                                            </label>
+                                        )}
                                     </div>
 
                                     {error && (
-                                        <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl text-sm">
+                                        <div role="alert" className="flex items-center gap-3 rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-300">
                                             <X size={16} /> {error}
                                         </div>
                                     )}
@@ -373,14 +433,11 @@ function CreateContent() {
                                     <Button
                                         onClick={handleGenerate}
                                         isLoading={loading}
-                                        className="w-full h-16 rounded-2xl text-white font-bold text-xl"
-                                        style={{
-                                            backgroundColor: eventConfig.colors.primary,
-                                            boxShadow: `0 0 20px ${eventConfig.colors.primary}30`,
-                                        }}
+                                        className="h-16 w-full rounded-xl text-lg font-semibold text-white"
+                                        style={{ backgroundColor: eventConfig.colors.primary === '#C9A15B' ? '#8E6B2E' : eventConfig.colors.primary }}
                                     >
-                                        <Wand2 className="mr-3" />
-                                        {language === 'fr' ? 'Générer le poème' : 'Generate Poem'}
+                                        <Wand2 className="mr-3 h-5 w-5" />
+                                        {fr ? 'Composer quatre cartes' : 'Compose four cards'}
                                     </Button>
                                 </div>
                             </div>
@@ -388,70 +445,103 @@ function CreateContent() {
                     ) : (
                         <motion.div
                             key="preview-step"
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
+                            initial={{ opacity: 0, y: 16 }}
+                            animate={{ opacity: 1, y: 0 }}
                             className="space-y-12"
                         >
-                            <div className="text-center space-y-4">
-                                <div className="inline-flex items-center justify-center w-16 h-16 rounded-full mb-4 border shadow-lg"
-                                     style={{
-                                         backgroundColor: `${eventConfig.colors.primary}20`,
-                                         color: eventConfig.colors.primary,
-                                         borderColor: `${eventConfig.colors.primary}20`,
-                                     }}
+                            <div className="mx-auto max-w-2xl text-center">
+                                <div
+                                    className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-full border"
+                                    style={{ borderColor: `${eventConfig.colors.accent}66`, color: eventConfig.colors.accent }}
                                 >
-                                    <Check size={32} />
+                                    <Check size={26} />
                                 </div>
-                                <h2 className="text-4xl font-bold">Votre poème est prêt !</h2>
-                                <p className="text-gray-400">Choisissez maintenant l'ambiance visuelle de votre carte.</p>
+                                <h2 className="font-serif text-4xl font-semibold md:text-5xl">
+                                    {fr ? `Quatre cartes pour ${name}` : `Four cards for ${name}`}
+                                </h2>
+                                <p className="mt-3 text-[#F6EFE4]/60">
+                                    {fr
+                                        ? 'Chaque carte a son propre univers. Retouchez le texte si besoin, puis choisissez.'
+                                        : 'Each card has its own world. Tweak the text if you like, then pick one.'}
+                                </p>
                             </div>
 
-                            <div className="grid md:grid-cols-2 gap-10">
-                                {/* ⭐ UTILISATION DES TEMPLATES DYNAMIQUES */}
-                                {templates.map((template) => {
-                                    const poemData = poems.find(p => p.template_id === template.id);
-                                    if (!poemData) return null;
+                            {error && (
+                                <div role="alert" className="mx-auto flex max-w-xl items-center gap-3 rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-300">
+                                    <X size={16} /> {error}
+                                </div>
+                            )}
 
-                                    return (
-                                        <motion.div
-                                            key={template.id}
-                                            whileHover={{ y: -10 }}
-                                            className="group relative bg-white/5 border border-white/10 p-6 rounded-[2rem] hover:border-white/30 transition-all duration-500"
+                            <div className="grid gap-12 sm:grid-cols-2 xl:grid-cols-4">
+                                {designs.map((design) => (
+                                    <div key={design.id} className="mx-auto w-full max-w-[420px]">
+                                        <CardRenderer design={design} imageUrl={photoForCard} />
+
+                                        <p className="mt-5 text-center font-serif text-lg italic text-[#F6EFE4]/70">
+                                            {design.concept}
+                                        </p>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditingId(editingId === design.id ? null : design.id)}
+                                            className="mx-auto mt-4 flex items-center gap-2 text-sm text-[#F6EFE4]/60 transition-colors hover:text-[#F6EFE4]"
                                         >
-                                            <div className="flex justify-between items-center mb-6">
-                                                <span
-                                                    className="text-xs font-black uppercase tracking-widest"
-                                                    style={{ color: eventConfig.colors.accent }}
-                                                >
-                                                    Style {template.label}
-                                                </span>
-                                                <Eye className="w-5 h-5 text-gray-600 group-hover:text-white transition-colors" />
-                                            </div>
+                                            <Pencil size={14} />
+                                            {editingId === design.id
+                                                ? (fr ? 'Fermer' : 'Close')
+                                                : (fr ? 'Modifier le texte' : 'Edit the text')}
+                                        </button>
 
-                                            <div className="rounded-2xl overflow-hidden shadow-2xl bg-black">
-                                                {/* ⭐ RENDU DU BON COMPOSANT */}
-                                                <template.Component
-                                                    name={name}
-                                                    poem={poemData.poem}
-                                                    imageUrl={imagePreview || imageUrl}
-                                                    language={language}
+                                        {editingId === design.id && (
+                                            <div className="mt-4 space-y-3 rounded-xl border border-[#F6EFE4]/10 bg-[#241519] p-4">
+                                                <input
+                                                    value={design.content.title}
+                                                    onChange={(e) => updateContent(design.id, { title: e.target.value })}
+                                                    maxLength={100}
+                                                    className={`${fieldClass} !py-2.5 !text-base`}
+                                                    aria-label={fr ? 'Titre' : 'Title'}
+                                                />
+                                                <textarea
+                                                    value={design.content.message}
+                                                    onChange={(e) => updateContent(design.id, { message: e.target.value })}
+                                                    maxLength={1200}
+                                                    rows={5}
+                                                    className={`${fieldClass} resize-none !py-2.5 !text-base`}
+                                                    aria-label="Message"
+                                                />
+                                                <input
+                                                    value={design.content.signature}
+                                                    onChange={(e) => updateContent(design.id, { signature: e.target.value })}
+                                                    maxLength={100}
+                                                    className={`${fieldClass} !py-2.5 !text-base`}
+                                                    aria-label={fr ? 'Signature' : 'Signature'}
                                                 />
                                             </div>
+                                        )}
 
-                                            <Button
-                                                onClick={() => handleSelectTemplate(template.id)}
-                                                isLoading={selectingTemplateId === template.id}
-                                                disabled={selectingTemplateId !== null && selectingTemplateId !== template.id}
-                                                className="w-full mt-8 h-14 rounded-xl text-white font-bold"
-                                                style={{
-                                                    backgroundColor: eventConfig.colors.primary,
-                                                }}
-                                            >
-                                                Choisir ce style
-                                            </Button>
-                                        </motion.div>
-                                    );
-                                })}
+                                        <Button
+                                            onClick={() => handleSelectDesign(design)}
+                                            isLoading={selectingDesignId === design.id}
+                                            disabled={selectingDesignId !== null && selectingDesignId !== design.id}
+                                            className="mt-6 h-14 w-full rounded-xl font-semibold text-white"
+                                            style={{ backgroundColor: eventConfig.colors.primary === '#C9A15B' ? '#8E6B2E' : eventConfig.colors.primary }}
+                                        >
+                                            {fr ? 'Choisir cette carte' : 'Choose this card'}
+                                        </Button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="text-center">
+                                <button
+                                    type="button"
+                                    onClick={handleGenerate}
+                                    disabled={loading}
+                                    className="inline-flex items-center gap-2 rounded-full border border-[#F6EFE4]/15 px-5 py-2.5 text-sm text-[#F6EFE4]/70 transition-colors hover:bg-[#F6EFE4]/5 hover:text-[#F6EFE4] disabled:opacity-50"
+                                >
+                                    <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+                                    {fr ? 'Proposer quatre autres cartes' : 'Suggest four other cards'}
+                                </button>
                             </div>
                         </motion.div>
                     )}
@@ -464,11 +554,8 @@ function CreateContent() {
 export default function CreatePage() {
     return (
         <Suspense fallback={
-            <div className="min-h-screen bg-[#030712] flex flex-col items-center justify-center gap-4">
-                <div className="w-12 h-12 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin" />
-                <p className="text-gray-500 font-black uppercase tracking-[0.3em] text-xs">
-                    Initialisation du Studio...
-                </p>
+            <div className="flex min-h-screen items-center justify-center bg-[#1A0F14]">
+                <div className="h-10 w-10 animate-spin rounded-full border-2 border-[#C9A15B]/30 border-t-[#C9A15B]" />
             </div>
         }>
             <CreateContent />

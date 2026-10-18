@@ -1,26 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateShareToken } from '@/lib/utils';
 import {supabaseAdmin} from "@/lib/supabaseAdmin";
+import { CardDesignSchema } from "@/lib/schemas/card-design";
 
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json();
-        const {
-            name,
-            gender,
-            language,
-            poem,
-            image_url,
-            event_type,
-            user_id
-        } = body;
+        const { name, gender, language, design, image_url, event_type, user_id } = body;
+        const validatedDesign = CardDesignSchema.safeParse(design);
 
-        const template_id = body.template_id || body.templateId;
-
-        if (!name || !gender || !language || !template_id || !poem || !event_type) {
-            console.log("Validation échouée. Reçu:", { name, template_id, event_type });
+        if (
+            typeof name !== "string" ||
+            !name.trim() ||
+            !["boy", "girl", "neutral"].includes(gender) ||
+            !["fr", "en"].includes(language) ||
+            !["christmas", "newyear", "valentine", "easter", "birthday", "mothersday", "fathersday"].includes(event_type) ||
+            !validatedDesign.success
+        ) {
             return NextResponse.json(
-                { error: 'Missing required fields' },
+                { error: 'Paramètres de carte invalides' },
                 { status: 400 }
             );
         }
@@ -33,8 +31,7 @@ export async function POST(request: NextRequest) {
                 name,
                 gender,
                 language,
-                template_id: Number(template_id),
-                poem,
+                poem: JSON.stringify(validatedDesign.data),
                 event_type,
                 image_url: image_url || null,
                 share_token: shareToken,

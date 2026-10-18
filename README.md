@@ -20,6 +20,33 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+<<<<<<< HEAD
+=======
+## Make & Wish : comment une carte est composée
+
+1. **Formulaire** (`app/create/page.tsx`) : occasion, destinataire (prénom + lien), ton, message facultatif, photo.
+2. **Profil d'occasion** (`lib/cards/occasion-profile.ts`) : chaque occasion a ses mises en page, ses palettes validées,
+   son kit de décors (houx et ruban pour Noël, fleurs en papier pour la fête des mères, ballons et cadeaux pour un anniversaire…).
+3. **Gemini** (`lib/ai/generate-card-designs.ts`) définit le concept graphique : idée, papier, typographie, décors et positions,
+   kicker, titre, message, signature. Les mises en page et palettes sont tirées dans le profil pour garantir deux cartes différentes.
+4. **Garde-fous** (`finalizeDesign`) : contraste vérifié, décors incohérents retirés, décors indispensables ajoutés,
+   typographie compatible avec la mise en page.
+5. **Rendu React** (`components/cards/`) : `decorations.tsx` dessine chaque décor en SVG (houx, baies, ruban de satin,
+   fleurs et feuillages en papier découpé, tulipes, coffrets, ballons, cœurs, étoiles, confettis, cadre) et
+   `card-renderer.tsx` assemble quatre mises en page : papeterie de luxe, affiche éditoriale, papier découpé floral, scène festive.
+   Les tailles sont en `cqw` : la carte est identique en vignette, en aperçu, à l'impression et à l'export.
+
+Configurez `GEMINI_API_KEY` côté serveur (jamais en `NEXT_PUBLIC_`) ; `GEMINI_MODEL` est optionnel (défaut `gemini-2.5-flash`).
+
+La carte choisie est stockée en JSON dans la colonne `cards.poem` : les anciennes cartes texte continuent de s'afficher
+grâce à `normalizeCardDesign`. Les nouveaux champs du schéma (`paper`, `content.kicker`, nouveaux types de décors) sont optionnels.
+
+### Ajouter une occasion ou un décor
+
+- Occasion : ajouter l'entrée dans `lib/events.ts` et `OCCASION_PROFILES`.
+- Décor : ajouter le type dans `lib/schemas/card-design.ts`, dessiner le SVG et ses ancrages dans `components/cards/decorations.tsx`.
+
+>>>>>>> fd7cb0c0fb3b09b8d0a8f66a15d9e7e3534c46ff
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

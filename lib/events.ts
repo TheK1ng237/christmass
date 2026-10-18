@@ -23,9 +23,9 @@ export const EVENTS: Record<EventType, EventConfig> = {
         },
         icon: TreePine,
         colors: {
-            primary: '#C41E3A', // Rouge Noël
-            secondary: '#165B33', // Vert Noël
-            accent: '#FFD700', // Or
+            primary: '#B3202F',
+            secondary: '#1D3B2F',
+            accent: '#C9A15B',
         },
         available: true,
     },
@@ -41,9 +41,9 @@ export const EVENTS: Record<EventType, EventConfig> = {
         },
         icon: PartyPopper, // Icône Lucide
         colors: {
-            primary: '#FFD700', // Or
-            secondary: '#C0C0C0', // Argent
-            accent: '#FF6B9D', // Rose festif
+            primary: '#C9A15B',
+            secondary: '#101528',
+            accent: '#E0687A',
         },
         available: true,
     },
@@ -59,9 +59,9 @@ export const EVENTS: Record<EventType, EventConfig> = {
         },
         icon: Heart, // Icône Lucide
         colors: {
-            primary: '#FF1744', // Rouge amour
-            secondary: '#F8BBD0', // Rose clair
-            accent: '#D81B60', // Rose foncé
+            primary: '#C2254B',
+            secondary: '#F7D5DB',
+            accent: '#E5566D',
         },
         available: true,
     },
@@ -77,9 +77,9 @@ export const EVENTS: Record<EventType, EventConfig> = {
         },
         icon: Egg, // Icône Lucide
         colors: {
-            primary: '#9C27B0', // Violet
-            secondary: '#FFEB3B', // Jaune
-            accent: '#4CAF50', // Vert printemps
+            primary: '#8A6BB0',
+            secondary: '#A8C686',
+            accent: '#E7B93E',
         },
         available: true,
     },
@@ -95,9 +95,9 @@ export const EVENTS: Record<EventType, EventConfig> = {
         },
         icon: Cake, // Icône Lucide
         colors: {
-            primary: '#FF9800', // Orange
-            secondary: '#2196F3', // Bleu
-            accent: '#E91E63', // Rose
+            primary: '#E0687A',
+            secondary: '#4B2E4E',
+            accent: '#F3A712',
         },
         available: true,
     },
@@ -113,9 +113,9 @@ export const EVENTS: Record<EventType, EventConfig> = {
         },
         icon: Flower2, // Icône Lucide
         colors: {
-            primary: '#E91E63', // Rose
-            secondary: '#F06292', // Rose clair
-            accent: '#AD1457', // Rose foncé
+            primary: '#E58AA0',
+            secondary: '#F2B8C0',
+            accent: '#9DB38A',
         },
         available: true,
     },
@@ -131,9 +131,9 @@ export const EVENTS: Record<EventType, EventConfig> = {
         },
         icon: UserRound, // Icône Lucide
         colors: {
-            primary: '#1976D2', // Bleu
-            secondary: '#42A5F5', // Bleu clair
-            accent: '#0D47A1', // Bleu foncé
+            primary: '#C49A4A',
+            secondary: '#14233B',
+            accent: '#6F93A8',
         },
         available: true,
     },

@@ -2,8 +2,20 @@
 
 @theme {
     /* Couleurs de base */
-    --color-background: #030712;
-    --color-foreground: #ffffff;
+    /* DA « atelier de papeterie » : table d'atelier aubergine, papier ivoire, rouge satin, laiton */
+    --color-background: #1A0F14;
+    --color-surface: #241519;
+    --color-surface-raised: #2D1C21;
+    --color-foreground: #F6EFE4;
+    --color-paper: #F4EEE3;
+    --color-ink: #2A2321;
+    --color-wine: #8E1B2E;
+    --color-satin: #B3202F;
+    --color-brass: #C9A15B;
+    --color-blush: #F2B8C0;
+
+    --font-sans: var(--font-ui), 'DM Sans', system-ui, sans-serif;
+    --font-serif: var(--font-display), 'Fraunces', Georgia, serif;
 
     /* Palette de rouge (Primary) */
     --color-primary-50: #fef2f2;
@@ -74,6 +86,17 @@
 }
 
 
+@layer base {
+    body {
+        font-family: var(--font-ui), 'DM Sans', system-ui, sans-serif;
+        color: var(--color-foreground);
+    }
+    /* Les titres de l'interface utilisent Fraunces ; "font-serif" aussi. */
+    h1, h2, h3, .font-serif {
+        font-family: var(--font-display), Georgia, serif;
+    }
+}
+
 @layer utilities {
     .no-scrollbar::-webkit-scrollbar {
         display: none;
@@ -110,6 +133,3 @@
     }
 }
 
-.test{
-    background: red !important;
-}

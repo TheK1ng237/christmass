@@ -1,13 +1,18 @@
 // Types pour l'application
 
-import {LucideIcon, LucideProps} from "lucide-react";
-import {ReactNode} from "react";
+import type { LucideProps } from "lucide-react";
+import type { CardDesign } from "@/lib/schemas/card-design";
 
 export type Language = 'fr' | 'en';
 
 export type Gender = 'boy' | 'girl' | 'neutral';
 
 export type TemplateId = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10;
+
+export interface GeneratedPoem {
+    template_id: TemplateId;
+    poem: string;
+}
 
 export type EventType = 'christmas' | 'newyear' | 'valentine' | 'easter' | 'birthday' | 'mothersday' | 'fathersday';
 
@@ -49,7 +54,7 @@ export interface CardData {
     gender: Gender;
     language: Language;
     event_type: EventType;
-    template_id: TemplateId;
+    design?: CardDesign;
     poem: string;
     image_url?: string;
     share_token: string;
@@ -62,11 +67,6 @@ export interface CardFormData {
     language: Language;
     event_type: EventType;
     image?: File;
-}
-
-export interface GeneratedPoem {
-    template_id: TemplateId;
-    poem: string;
 }
 
 export interface BatchContact {
@@ -94,7 +94,6 @@ export interface ShareOptions {
 
 export interface CardRow {
     id: string;
-    template_id: number;
     created_at?: string;           // nullable
     is_public?: boolean;           // nullable
     views_count?: number;          // nullable
@@ -106,6 +105,7 @@ export interface CardRow {
     share_token: string;
     event_type: EventType;
     poem: string;
+    design?: CardDesign;
 }
 
 export interface CardStats {
@@ -130,12 +130,4 @@ export interface CardModalProps {
     card: CardData;
     onClose: () => void;
     onShare: () => void;
-}
-
-export interface CardTemplateProps {
-    name: string;
-    poem: string;
-    imageUrl?: string;
-    isBusiness?: boolean;
-    language: 'fr' | 'en';
 }
