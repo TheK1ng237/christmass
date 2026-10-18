@@ -77,6 +77,12 @@ function DashboardContent() {
     const loadUserCards = async () => {
         setIsLoading(true);
         try {
+            const claimResponse = await fetch('/api/cards/claim-guest', { method: 'POST' });
+            if (!claimResponse.ok) {
+                const claimError = await claimResponse.json();
+                throw new Error(claimError.error || 'Impossible de récupérer vos cartes invité.');
+            }
+
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
