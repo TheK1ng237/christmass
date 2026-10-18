@@ -20,7 +20,7 @@ import type { CardDesign } from '@/lib/schemas/card-design';
 import { Language, Gender, EventType } from '@/lib/types';
 import { CardRenderer } from '@/components/cards/card-renderer';
 
-import { CardCreationError, eventService } from '@/lib/Services/eventService';
+import { CardCreationError, CardGenerationError, eventService } from '@/lib/Services/eventService';
 import { useAuth } from '@/lib/auth/AuthContext';
 
 type Tone = 'warm' | 'formal' | 'funny' | 'emotional' | 'spiritual';
@@ -154,7 +154,22 @@ function CreateContent() {
             setStep('preview');
             window.scrollTo({ top: 0, behavior: 'smooth' });
         } catch (err: unknown) {
-            handleError(err);
+            if (err instanceof CardGenerationError) {
+                const messages: Record<string, string> = fr
+                    ? {
+                        RATE_LIMITED: "Le service est très sollicité en ce moment. Patientez quelques instants puis réessayez.",
+                        NETWORK_ERROR: "La connexion a été interrompue. Vérifiez votre réseau puis réessayez.",
+                        GENERATION_FAILED: "Nous n’avons pas pu créer vos cartes cette fois. Vos informations sont conservées : vous pouvez réessayer.",
+                    }
+                    : {
+                        RATE_LIMITED: "The service is busy right now. Please wait a moment and try again.",
+                        NETWORK_ERROR: "Your connection was interrupted. Check your network and try again.",
+                        GENERATION_FAILED: "We couldn't create your cards this time. Your details are saved, so you can try again.",
+                    };
+                setError(messages[err.code] || messages.GENERATION_FAILED);
+            } else {
+                handleError(err);
+            }
         } finally {
             setLoading(false);
         }
