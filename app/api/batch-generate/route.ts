@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 
 import { generateCardDesigns } from '@/lib/ai/generate-card-designs';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
@@ -41,7 +42,38 @@ function isLayout(value: unknown): value is CardDesign['layout'] {
 }
 
 export async function POST(request: NextRequest) {
+    const refreshedCookies: Array<{ name: string; value: string; options: CookieOptions }> = [];
+    const withAuthCookies = (response: NextResponse) => {
+        refreshedCookies.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
+        });
+        return response;
+    };
+
     try {
+        const authClient = createServerClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL!,
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            {
+                cookies: {
+                    getAll: () => request.cookies.getAll(),
+                    setAll: (cookiesToSet) => {
+                        refreshedCookies.push(...cookiesToSet);
+                    },
+                },
+            }
+        );
+        const { data: authData, error: authError } = await authClient.auth.getUser();
+
+        if (authError && authError.name !== 'AuthSessionMissingError') {
+            console.error('Unable to verify the current user for batch generation:', authError);
+            return withAuthCookies(NextResponse.json({ error: 'Impossible de vérifier votre session.' }, { status: 503 }));
+        }
+
+        if (!authData.user) {
+            return withAuthCookies(NextResponse.json({ error: 'Connexion requise.' }, { status: 401 }));
+        }
+
         const body = await request.json();
         const {
             contacts,
@@ -49,7 +81,6 @@ export async function POST(request: NextRequest) {
             layout,
             eventType,
             logoUrl,
-            userId,
             businessName,
         } = body as {
             contacts?: BatchContact[];
@@ -57,7 +88,6 @@ export async function POST(request: NextRequest) {
             layout?: CardDesign['layout'];
             eventType?: EventType;
             logoUrl?: string;
-            userId?: string;
             businessName?: string;
         };
 
@@ -69,7 +99,7 @@ export async function POST(request: NextRequest) {
             !isLayout(layout) ||
             !isEventType(eventType)
         ) {
-            return NextResponse.json({ error: 'Paramètres de génération groupée invalides' }, { status: 400 });
+            return withAuthCookies(NextResponse.json({ error: 'Paramètres de génération groupée invalides' }, { status: 400 }));
         }
 
         const results: BatchGenerationResult[] = [];
@@ -115,7 +145,7 @@ export async function POST(request: NextRequest) {
                         poem: JSON.stringify(design),
                         image_url: logoUrl || null,
                         share_token: shareToken,
-                        user_id: userId || null,
+                        user_id: authData.user.id,
                         business_name: businessName || null,
                         phone: contact.phone || null,
                     })
@@ -141,9 +171,9 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        return NextResponse.json({ results }, { headers: { 'Cache-Control': 'no-store' } });
+        return withAuthCookies(NextResponse.json({ results }, { headers: { 'Cache-Control': 'no-store' } }));
     } catch (error) {
         console.error('Erreur de génération groupée', error);
-        return NextResponse.json({ error: 'La génération groupée a échoué.' }, { status: 500 });
+        return withAuthCookies(NextResponse.json({ error: 'La génération groupée a échoué.' }, { status: 500 }));
     }
 }

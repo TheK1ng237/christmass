@@ -46,7 +46,6 @@ export async function middleware(request: NextRequest) {
     // 1. Routes privées utilisateurs
     const isProtectedRoute =
         pathname.startsWith('/dashboard') ||
-        pathname.startsWith('/create') ||
         pathname.startsWith('/batch');
 
     if (isProtectedRoute && !user) {
