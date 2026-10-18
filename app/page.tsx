@@ -178,31 +178,45 @@ export default function HomePage() {
                 </AnimatePresence>
 
                 {/* Features — Editorial numbered grid */}
+                
+
+                {/* How it works */}
                 <div className="mb-28">
                     <div className="flex items-center gap-8 mb-10">
-                        <h2 className="font-serif text-2xl font-semibold text-white/80 whitespace-nowrap">Ce qui rend chaque carte unique</h2>
+                        <h2 className="font-serif text-2xl font-semibold text-white/80 whitespace-nowrap">Comment ça marche</h2>
                         <div className="hidden sm:block h-px flex-1 bg-white/[0.06]" />
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="grid md:grid-cols-3 gap-4">
                         {[
-                            { label: "Un concept, pas un fond uni", sub: "Gemini imagine l'univers graphique complet", num: "01" },
-                            { label: "Décors dessinés à la main", sub: "Ruban, houx, fleurs, ballons selon l'occasion", num: "02" },
-                            { label: "Français & anglais", sub: "Le message s'écrit dans la langue de la personne", num: "03" },
-                            { label: "Export & partage", sub: "PNG haute résolution, impression, lien WhatsApp", num: "04" },
-                        ].map((f, i) => (
+                            {
+                                number: '01',
+                                title: 'Choisissez l’occasion',
+                                text: 'Sélectionnez le type d’événement, le style visuel et le destinataire.',
+                            },
+                            {
+                                number: '02',
+                                title: 'L’IA crée la carte',
+                                text: 'Le message, les décors et les couleurs sont générés en fonction de votre contexte.',
+                            },
+                            {
+                                number: '03',
+                                title: 'Partagez ou imprimez',
+                                text: 'Téléchargez en haute résolution, envoyez par email ou partagez en WhatsApp.',
+                            },
+                        ].map((step) => (
                             <div
-                                key={i}
-                                className="group p-5 rounded-2xl bg-white/[0.025] border border-white/[0.05] hover:border-white/[0.10] hover:bg-white/[0.04] transition-all cursor-default"
+                                key={step.number}
+                                className="rounded-3xl border border-white/[0.07] bg-white/[0.025] p-6 sm:p-7"
                             >
                                 <span
-                                    className="block text-[11px] font-mono mb-4"
+                                    className="block text-[11px] font-mono mb-5"
                                     style={{ color: currentEvent.colors.accent + '80' }}
                                 >
-                                    {f.num}
+                                    {step.number}
                                 </span>
-                                <h3 className="font-serif text-[15px] font-semibold text-white mb-2 leading-snug">{f.label}</h3>
-                                <p className="text-white/35 text-[12px] leading-relaxed">{f.sub}</p>
+                                <h3 className="font-serif text-[22px] font-semibold text-white mb-3">{step.title}</h3>
+                                <p className="text-[13px] leading-relaxed text-white/45">{step.text}</p>
                             </div>
                         ))}
                     </div>
