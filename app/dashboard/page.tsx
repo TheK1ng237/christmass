@@ -77,6 +77,12 @@ function DashboardContent() {
     const loadUserCards = async () => {
         setIsLoading(true);
         try {
+            const claimResponse = await fetch('/api/cards/claim-guest', { method: 'POST' });
+            if (!claimResponse.ok) {
+                const claimError = await claimResponse.json();
+                throw new Error(claimError.error || 'Impossible de récupérer vos cartes invité.');
+            }
+
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
@@ -396,10 +402,12 @@ function CardGridItem({ card, isSelected, onSelect, onShare }: { card: CardData,
                 {/* Checkbox */}
                 <button
                     onClick={onSelect}
+                    aria-label={isSelected ? `Désélectionner la carte de ${card.name}` : `Sélectionner la carte de ${card.name}`}
+                    aria-pressed={isSelected}
                     className={`absolute top-3 left-3 z-30 w-6 h-6 rounded-full border-2 transition-all flex items-center justify-center backdrop-blur-sm ${
                         isSelected
                             ? 'border-white bg-white text-black opacity-100'
-                            : 'border-white/30 bg-black/40 opacity-0 group-hover:opacity-100'
+                            : 'border-white/30 bg-black/40 opacity-100 md:opacity-0 md:group-hover:opacity-100'
                     }`}
                 >
                     {isSelected && <Check size={12} strokeWidth={3} />}
@@ -419,10 +427,12 @@ function CardGridItem({ card, isSelected, onSelect, onShare }: { card: CardData,
                 </div>
 
                 {/* Actions — barre glissante depuis le bas */}
-                <div className="absolute bottom-0 inset-x-0 z-20 p-3 flex gap-2 bg-gradient-to-t from-black/70 via-black/30 to-transparent translate-y-full group-hover:translate-y-0 transition-transform duration-200 ease-out">
+                <div className="absolute bottom-0 inset-x-0 z-20 p-3 flex gap-2 bg-gradient-to-t from-black/80 via-black/45 to-transparent translate-y-0 md:translate-y-full md:group-hover:translate-y-0 transition-transform duration-200 ease-out">
                     <a
                         href={`/preview/${card.share_token}`}
                         target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Ouvrir l’aperçu de la carte de ${card.name}`}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-white text-black text-[12px] font-semibold hover:bg-white/90 transition-colors"
                     >
                         <ExternalLink size={13} />
@@ -430,6 +440,7 @@ function CardGridItem({ card, isSelected, onSelect, onShare }: { card: CardData,
                     </a>
                     <button
                         onClick={onShare}
+                        aria-label={`Partager la carte de ${card.name}`}
                         className="px-4 py-2.5 rounded-xl bg-white/10 border border-white/20 text-white hover:bg-white/20 transition-all backdrop-blur-md"
                         title="Partager"
                     >
@@ -489,12 +500,15 @@ function CardListItem({ card, isSelected, onSelect, onShare }: { card: CardData,
                 <a
                     href={`/preview/${card.share_token}`}
                     target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={`Ouvrir l’aperçu de la carte de ${card.name}`}
                     className="p-2.5 rounded-lg bg-white/[0.04] text-white/35 hover:text-white hover:bg-white/[0.08] transition-all"
                 >
                     <ExternalLink size={15} />
                 </a>
                 <button
                     onClick={onShare}
+                    aria-label={`Partager la carte de ${card.name}`}
                     className="p-2.5 rounded-lg bg-white/[0.04] text-white/35 hover:text-white hover:bg-white/[0.08] transition-all"
                 >
                     <Send size={15} />

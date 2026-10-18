@@ -1,6 +1,16 @@
 import { Language, Gender, EventType } from '@/lib/types';
 import type { CardDesign, GenerateRequest } from '@/lib/schemas/card-design';
 
+export class CardCreationError extends Error {
+    constructor(
+        message: string,
+        public readonly code?: string
+    ) {
+        super(message);
+        this.name = 'CardCreationError';
+    }
+}
+
 export const eventService = {
     /**
      * Upload d'une image vers le serveur
@@ -55,8 +65,7 @@ export const eventService = {
         language: Language,
         eventType: EventType,
         design: CardDesign,
-        imageUrl: string | null
-        user_id: string | null;
+        imageUrl: string | null;
     }) {
 
         const res = await fetch('/api/create-card', {
@@ -69,13 +78,12 @@ export const eventService = {
                 event_type: params.eventType,
                 design: params.design,
                 image_url: params.imageUrl,
-                user_id: params.user_id,
             }),
         });
 
         if (!res.ok) {
             const errorData = await res.json();
-            throw new Error(errorData.error || 'Erreur de création');
+            throw new CardCreationError(errorData.error || 'Erreur de création', errorData.code);
         }
 
         return await res.json();

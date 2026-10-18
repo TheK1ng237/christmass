@@ -20,8 +20,8 @@ import type { CardDesign } from '@/lib/schemas/card-design';
 import { Language, Gender, EventType } from '@/lib/types';
 import { CardRenderer } from '@/components/cards/card-renderer';
 
-import { eventService } from '@/lib/Services/eventService';
-import { useAuth } from "@/lib/auth/AuthContext";
+import { CardCreationError, eventService } from '@/lib/Services/eventService';
+import { useAuth } from '@/lib/auth/AuthContext';
 
 type Tone = 'warm' | 'formal' | 'funny' | 'emotional' | 'spiritual';
 
@@ -58,12 +58,12 @@ function Label({ children, hint }: { children: React.ReactNode; hint?: string })
 function CreateContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const { user } = useAuth();
-
+    const { user, loading: authLoading } = useAuth();
     const [step, setStep] = useState<'form' | 'preview'>('form');
     const [loading, setLoading] = useState(false);
     const [selectingDesignId, setSelectingDesignId] = useState<CardDesign['id'] | null>(null);
     const [error, setError] = useState('');
+    const [requiresLogin, setRequiresLogin] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [editingId, setEditingId] = useState<CardDesign['id'] | null>(null);
 
@@ -128,13 +128,9 @@ function CreateContent() {
             setError(fr ? 'Indiquez le prénom du destinataire.' : 'Enter the recipient\'s first name.');
             return;
         }
-        if (!user) {
-            setError(fr ? 'Connectez-vous pour créer une carte.' : 'Log in to create a card.');
-            return;
-        }
-
         setLoading(true);
         setError('');
+        setRequiresLogin(false);
 
         try {
             let currentImageUrl = imageUrl;
@@ -174,13 +170,9 @@ function CreateContent() {
         if (isSubmitting) return;
         setIsSubmitting(true);
         setSelectingDesignId(design.id);
+        setError('');
+        setRequiresLogin(false);
         try {
-            if (!user?.id) {
-                setError(fr ? "Connectez-vous pour enregistrer cette carte." : "Log in to save this card.");
-                setSelectingDesignId(null);
-                return;
-            }
-
             const data = await eventService.createCard({
                 name,
                 gender,
@@ -188,12 +180,18 @@ function CreateContent() {
                 eventType,
                 design,
                 imageUrl: imageUrl || null,
-                user_id: user.id,
             });
 
             router.push(`/preview/${data.card.share_token}`);
         } catch (err) {
-            handleError(err);
+            if (err instanceof CardCreationError && err.code === 'LOGIN_REQUIRED') {
+                setRequiresLogin(true);
+                setError(fr
+                    ? 'Vous avez utilisé vos 2 cartes gratuites. Connectez-vous pour en créer une autre.'
+                    : 'You have used your 2 free cards. Log in to create another one.');
+            } else {
+                handleError(err);
+            }
             setSelectingDesignId(null);
         } finally {
             setIsSubmitting(false);
@@ -260,6 +258,13 @@ function CreateContent() {
                                         ? "Dites-nous pour qui et pour quelle occasion. Gemini imagine le concept, le message et les décors ; vous choisissez, vous retouchez, vous partagez."
                                         : "Tell us who it's for and what the occasion is. Gemini imagines the concept, the message and the decor; you choose, tweak and share."}
                                 </p>
+                                {!authLoading && !user && (
+                                    <p className="mt-4 text-sm leading-relaxed text-[#E2B976]/80">
+                                        {fr
+                                            ? 'Créez deux cartes sans compte. La connexion sera nécessaire pour en créer une troisième.'
+                                            : 'Create two cards without an account. Log in to create a third one.'}
+                                    </p>
+                                )}
 
                                 <div className="mx-auto mt-10 w-[min(100%,300px)] lg:mx-0">
                                     <motion.div
@@ -467,8 +472,18 @@ function CreateContent() {
                             </div>
 
                             {error && (
-                                <div role="alert" className="mx-auto flex max-w-xl items-center gap-3 rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-300">
-                                    <X size={16} /> {error}
+                                <div role="alert" className="mx-auto flex max-w-xl flex-col items-start gap-3 rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-sm text-red-300">
+                                    <span className="flex items-center gap-3">
+                                        <X size={16} /> {error}
+                                    </span>
+                                    {requiresLogin && (
+                                        <Button
+                                            onClick={() => router.push(`/auth?next=${encodeURIComponent('/create')}`)}
+                                            className="rounded-xl"
+                                        >
+                                            {fr ? 'Se connecter' : 'Log in'}
+                                        </Button>
+                                    )}
                                 </div>
                             )}
 
