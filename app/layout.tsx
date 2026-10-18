@@ -12,6 +12,7 @@ import Navbar from "@/components/Navbar";
 import {EventProvider} from "@/app/context/EventContext";
 import GlobalParticles from "@/components/EventVisuals";
 import {AuthProvider} from "@/lib/auth/AuthContext";
+import { publicSiteUrl } from '@/lib/seo';
 
 // Interface : Fraunces (titres) + DM Sans (texte)
 const dmSans = DM_Sans({ subsets: ['latin'], variable: '--font-ui', display: 'swap' });
@@ -30,9 +31,25 @@ const script = Great_Vibes({ subsets: ['latin'], weight: '400', variable: '--fon
 const poster = Bebas_Neue({ subsets: ['latin'], weight: '400', variable: '--font-poster', display: 'swap' });
 
 export const metadata: Metadata = {
-    title: 'Make & Wish | Cartes de vœux créées avec l’IA',
+    metadataBase: publicSiteUrl,
+    title: {
+        default: 'Make & Wish | Cartes de vœux créées avec l’IA',
+        template: '%s | Make & Wish',
+    },
     description: 'Décrivez l’occasion et la personne : Make & Wish compose une vraie carte, avec son message, son univers graphique, ses décors et son papier. Personnalisez, téléchargez, partagez.',
-    keywords: 'carte de vœux, IA, Noël, anniversaire, fête des mères, carte personnalisée, Make & Wish',
+    keywords: ['carte de vœux', 'carte personnalisée', 'carte de vœux avec IA', 'Make & Wish'],
+    openGraph: {
+        type: 'website',
+        locale: 'fr_FR',
+        siteName: 'Make & Wish',
+        title: 'Make & Wish | Cartes de vœux créées avec l’IA',
+        description: 'Créez une carte de vœux personnalisée avec son message et son univers graphique.',
+    },
+    twitter: {
+        card: 'summary',
+        title: 'Make & Wish | Cartes de vœux créées avec l’IA',
+        description: 'Créez une carte de vœux personnalisée avec son message et son univers graphique.',
+    },
 };
 
 export default function RootLayout({
