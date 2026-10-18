@@ -16,7 +16,7 @@ export const metadata: Metadata = {
         ...(publicSiteUrl ? { url: new URL('/templates', publicSiteUrl).href } : {}),
     },
     twitter: {
-        card: 'summary',
+        card: 'summary_large_image',
         title,
         description,
     },
