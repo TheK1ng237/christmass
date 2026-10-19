@@ -12,8 +12,8 @@ export async function seedAdmin() {
     const adminEmail = process.env.ADMIN_EMAIL;
     const adminPassword = process.env.ADMIN_PASSWORD;
 
-    if (!url || !serviceKey || !adminEmail || !adminPassword) {
-        console.warn('[seed] Variables manquantes — seed admin ignoré.');
+    if (!url || !serviceKey || !adminEmail) {
+        console.error('[seed] NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY et ADMIN_EMAIL sont requis.');
         return;
     }
 
@@ -24,40 +24,55 @@ export async function seedAdmin() {
 
     try {
         // 1. Vérifie si l'admin existe déjà dans auth.users
-        const { data: existing, error: listErr } = await admin.auth.admin.listUsers();
+        const { data: existing, error: listErr } = await admin.auth.admin.listUsers({ perPage: 1000 });
         if (listErr) throw listErr;
 
-        const alreadyExists = existing.users.some(
+        const existingAdmin = existing.users.find(
             (u) => u.email?.toLowerCase() === adminEmail.toLowerCase()
         );
 
-        if (alreadyExists) {
-            console.log(`[seed] ✓ Admin "${adminEmail}" existe déjà.`);
-            return;
-        }
+        let adminUserId: string;
 
-        // 2. Crée l'utilisateur admin dans Auth
-        const { data: created, error: createErr } = await admin.auth.admin.createUser({
-            email: adminEmail,
-            password: adminPassword,
-            email_confirm: true,          // Pas besoin de confirmation par email
-            user_metadata: { name: 'Admin', role: 'admin' },
-        });
-        if (createErr) throw createErr;
-
-        // 3. Insère dans la table admin_users (si elle existe)
-        //    On ne fait pas échouer si la table n'existe pas encore.
-        if (created?.user) {
-            const { error: insertErr } = await admin
-                .from('admin_users')
-                .upsert({ id: created.user.id, email: adminEmail }, { onConflict: 'id' });
-            if (insertErr) {
-                console.warn('[seed] Table admin_users absente — ignoré:', insertErr.message);
+        if (existingAdmin) {
+            const { data: updated, error: updateErr } = await admin.auth.admin.updateUserById(
+                existingAdmin.id,
+                {
+                    user_metadata: {
+                        ...existingAdmin.user_metadata,
+                        name: existingAdmin.user_metadata?.name || 'Admin',
+                        role: 'admin',
+                    },
+                }
+            );
+            if (updateErr) throw updateErr;
+            adminUserId = updated.user.id;
+            console.log(`[seed] ✓ Rôle admin vérifié pour "${adminEmail}".`);
+        } else {
+            if (!adminPassword) {
+                console.error('[seed] ADMIN_PASSWORD est requis pour créer le compte admin.');
+                return;
             }
+
+            const { data: created, error: createErr } = await admin.auth.admin.createUser({
+                email: adminEmail,
+                password: adminPassword,
+                email_confirm: true,
+                user_metadata: { name: 'Admin', role: 'admin' },
+            });
+            if (createErr) throw createErr;
+            adminUserId = created.user.id;
         }
 
-        console.log(`[seed] ✅ Admin "${adminEmail}" créé avec succès.`);
-    } catch (err: any) {
-        console.error('[seed] Erreur lors du seed admin:', err?.message ?? err);
+        const { error: insertErr } = await admin
+            .from('admin_users')
+            .upsert({ id: adminUserId, email: adminEmail }, { onConflict: 'id' });
+        if (insertErr) {
+            console.warn('[seed] Écriture dans admin_users échouée:', insertErr.message);
+        }
+    } catch (err: unknown) {
+        console.error(
+            '[seed] Erreur lors du seed admin:',
+            err instanceof Error ? err.message : err
+        );
     }
 }
